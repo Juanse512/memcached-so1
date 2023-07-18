@@ -1,0 +1,12 @@
+- locks en tabla hash --
+- implementar stats --
+- arreglar tamaños --*
+- implementar delete --
+    -revisar lastDelete y firstDelete --
+- cliente erlang
+- modo binario - puerto diferente
+- frees
+- arreglar puertos--agregar otro socket, y meterlo en lsock == events[i].data.fd
+- permisos
+- strtok tamaño default
+- EPOLLONESHOT - probar
