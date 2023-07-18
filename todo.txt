@@ -4,9 +4,11 @@
 - implementar delete --
     -revisar lastDelete y firstDelete --
 - cliente erlang
-- modo binario - puerto diferente
+- modo binario - puerto diferente 
+    - implementar parser binario
 - frees
-- arreglar puertos--agregar otro socket, y meterlo en lsock == events[i].data.fd
+- arreglar puertos--agregar otro socket, y meterlo en lsock == events[i].data.fd --
 - permisos
 - strtok tamaño default
-- EPOLLONESHOT - probar
+- EPOLLONESHOT - probar -- 
+- arreglar concurrencia borrado, actualizar lista --

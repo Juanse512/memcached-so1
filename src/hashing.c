@@ -94,6 +94,35 @@ Word * find_word(char * word){
             if(aux->word != NULL){ 
                 if(strcmp(word, aux->word) == 0){
                     returnValue = aux;
+                    if(returnValue->prev_delete != NULL){
+                        pthread_mutex_lock(&lastElemLock);
+                        if(returnValue == lastElemDelete){
+                            lastElemDelete = returnValue->prev_delete;
+                        }
+                        pthread_mutex_unlock(&lastElemLock);
+
+                        pthread_mutex_t* prev_lock = get_lock(returnValue->prev_delete->hash % tableSize);
+                        pthread_mutex_t* next_lock = get_lock(returnValue->next_delete->hash % tableSize);
+                        // PUEDE ENTRAR EN DEADLOCK? CREO QUE NO
+                        if(prev_lock != lock){
+                            pthread_mutex_lock(prev_lock);
+                        }
+                        if(next_lock != lock){
+                            pthread_mutex_lock(next_lock);
+                        }
+                            returnValue->prev_delete->next_delete = returnValue->next_delete;
+                        if(next_lock != lock){
+                            pthread_mutex_unlock(next_lock);
+                        }
+                        if(prev_lock != lock){
+                            pthread_mutex_unlock(prev_lock);
+                        }
+                    }
+                    returnValue->prev_delete = NULL;
+                    pthread_mutex_lock(&firstElemLock);
+                    returnValue->next_delete = firstElemDelete;
+                    firstElemDelete = returnValue;
+                    pthread_mutex_unlock(&firstElemLock);
                     flag = 0;
                 }
             }

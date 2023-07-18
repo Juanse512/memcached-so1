@@ -24,7 +24,7 @@ int tableSize;
 int lockSize;
 int binlsock;
 int PUTS, DELS, GETS, KEYVALUES;
-pthread_mutex_t putsLock, delsLock, getsLock, kvLock;
+pthread_mutex_t putsLock, delsLock, getsLock, kvLock, firstElemLock, lastElemLock;
 Word * lastElemDelete;
 Word * firstElemDelete;
 Word ** hashTable;

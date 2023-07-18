@@ -13,6 +13,14 @@
 #include "../headers/helpers.h"
 #include "../headers/hashing.h"
 int epfd = 0;
+
+typedef struct SocketDataS {
+    int fd;
+    int bin;
+    // Add any other fields you might need
+} SocketData;
+
+
 /*
  * Para probar, usar netcat. Ej:
  *
@@ -61,7 +69,9 @@ static void epoll_ctl_add(int epfd, int fd, uint32_t events)
 {
 	struct epoll_event ev;
 	ev.events = events;
-	ev.data.fd = fd;
+	// ev.data.fd = fd;
+	ev.data.ptr = malloc(sizeof(SocketData));
+	((SocketData*)ev.data.ptr)->fd = fd;
   /* registro fd a la instancia epoll con sus eventos asociados*/
 	if (epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &ev) == -1) {
 		perror("epoll_ctl()\n");
@@ -212,7 +222,8 @@ void * thread_f(void * arg){
     while(1){
         nfds = epoll_wait(epfd, events, 10, -1);  //chequear error
         for (int i = 0; i < nfds; i++) {
-            if (lsock == events[i].data.fd)
+			printf("HERE\n");
+            if (lsock == (((SocketData*)events[i].data.ptr)->fd))
             { 
                 
                     //struct sockaddr in_addr;
@@ -224,9 +235,13 @@ void * thread_f(void * arg){
                         if (s == -1)
                         abort ();
 
-						// event.data.ptr = &text;
-                        event.data.fd = infd;
+						// event.data.u32 = (uint32_t)0;
                         event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+                        // event.data.fd = infd;
+						
+						event.data.ptr = malloc(sizeof(SocketData));
+						((SocketData*)event.data.ptr)->fd = infd;
+						((SocketData*)event.data.ptr)->bin = 0;
                         printf("set events %u, infd=%d\n", event.events, infd);
                         s = epoll_ctl (epfd, EPOLL_CTL_ADD, infd, &event);
                         if (s == -1)
@@ -236,7 +251,7 @@ void * thread_f(void * arg){
                         }
         /*              continue; */
                 }else{
-						if (binlsock == events[i].data.fd){
+						if (binlsock == (((SocketData*)events[i].data.ptr)->fd)){
 							printf("BINARY MODE\n");
 							int infd;
 							//in_len = sizeof in_addr;
@@ -245,9 +260,12 @@ void * thread_f(void * arg){
 							if (s == -1)
 							abort ();
 
-							// event.data.ptr = &bin;
-							event.data.fd = infd;
+							// event.data.u32 = (uint32_t)1;
 							event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+							// event.data.fd = infd;
+							event.data.ptr = malloc(sizeof(SocketData));
+							((SocketData*)event.data.ptr)->fd = infd;
+							((SocketData*)event.data.ptr)->bin = 1;
 							printf("set events %u, infd=%d\n", event.events, infd);
 							s = epoll_ctl (epfd, EPOLL_CTL_ADD, infd, &event);
 							if (s == -1)
@@ -260,26 +278,26 @@ void * thread_f(void * arg){
 
                             ssize_t count;
                             char buf[512];
-							// printf("type: %d\n", *((int*)events[i].data.ptr));
+							printf("type: %d\n", (((SocketData*)events[i].data.ptr)->bin));
 							// int type = *((int*)events[i].data.ptr);
-							// if(type == 0){
-                            	done = handle_conn(events[i].data.fd);
-							// }else{
-							// 	done = 2;
-							// 	printf("BINARY MODE\n");
-							// }
+							if((((SocketData*)events[i].data.ptr)->bin) == 0){
+                            	done = handle_conn(((SocketData*)events[i].data.ptr)->fd);
+							}else{
+								done = 2;
+								printf("BINARY MODE\n");
+							}
 
 
                             if (done == 1)
                             {
                                 printf ("Closed connection on descriptor %d\n",
-                                        events[i].data.fd);
-                                close (events[i].data.fd);
-
+                                        (((SocketData*)events[i].data.ptr)->fd));
+                                close (((SocketData*)events[i].data.ptr)->fd);
+								free(events[i].data.ptr);
                             }else{
 								event.events = EPOLLIN | EPOLLONESHOT;
-								event.data.fd = events[i].data.fd;
-								epoll_ctl(epfd, EPOLL_CTL_MOD, events[i].data.fd, &event);
+								((SocketData*)event.data.ptr)->fd = (((SocketData*)events[i].data.ptr)->fd);
+								epoll_ctl(epfd, EPOLL_CTL_MOD, (((SocketData*)events[i].data.ptr)->fd), &event);
 							}
 						}
                 }

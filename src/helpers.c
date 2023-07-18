@@ -149,6 +149,14 @@ void init(){
         printf("\n mutex init failed\n");
         return;
     }
+    if (pthread_mutex_init(&firstElemLock, NULL) != 0) {
+        printf("\n mutex init failed\n");
+        return;
+    }
+    if (pthread_mutex_init(&lastElemLock, NULL) != 0) {
+        printf("\n mutex init failed\n");
+        return;
+    }
     firstElemDelete = NULL;
     lastElemDelete = NULL;
     tableSize = 100;
