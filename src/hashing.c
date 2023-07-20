@@ -89,6 +89,7 @@ Word * find_word(char * word){
     pthread_mutex_lock(lock);
     Word * aux = hashTable[position];
     Word * returnValue = NULL;
+    printf("hash: %ld", strlen(word));
     while(aux != NULL && flag != 0){
         if(aux->hash == first_hash){
             if(aux->word != NULL){ 
@@ -111,6 +112,7 @@ Word * find_word(char * word){
                             pthread_mutex_lock(next_lock);
                         }
                             returnValue->prev_delete->next_delete = returnValue->next_delete;
+                            // revisar si next lock y prev lock son iguales
                         if(next_lock != lock){
                             pthread_mutex_unlock(next_lock);
                         }

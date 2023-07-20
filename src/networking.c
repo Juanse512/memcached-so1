@@ -10,8 +10,26 @@
 #include <netdb.h>
 #include <pthread.h>
 #include <sys/syscall.h>
+#include <math.h>
+
 #include "../headers/helpers.h"
 #include "../headers/hashing.h"
+
+enum code {
+	PUT = 11,
+	DEL = 12,
+	GET = 13,
+
+	STATS = 21,
+
+	OK = 101,
+	EINVALID = 111,
+	ENOTFOUND = 112,
+	EBINARY = 113,
+	EBIG = 114,
+	EUNK = 115,
+};
+
 int epfd = 0;
 
 typedef struct SocketDataS {
@@ -63,6 +81,59 @@ int fd_readline(int fd, char *buf)
 	return i;
 }
 
+int read_byte(int fd, char* byte){
+	return read(fd, byte, 1);
+}
+
+char * fd_readline_bin(int fd, char *mode){
+	int rc;
+	int i = 0;
+	int size = 0;
+	char b1,b2,b3,b4;
+	char * buf;
+	if(mode != NULL){
+		rc = read(fd, mode, 1);
+		if(rc <= 0){
+			return 0;
+		}
+	}
+	if(read_byte(fd, &b1) && read_byte(fd, &b2) && read_byte(fd, &b3) && read_byte(fd, &b4)){
+		size = ((int)b1 * pow(256,3)) + ((int)b2 * pow(256,2)) + ((int)b3 * pow(256,1)) + ((int)b4);
+		printf("size: %d\n", size);
+		buf = malloc(sizeof(char)*(size+2));
+		while (i < size) {
+			rc = read(fd, buf + i, size - i);
+			if (rc <= 0)
+				break;
+			i += rc;
+		}
+		// if(mode == NULL){
+		// 	int flag = 0;
+		// 	while(flag == 0){
+		// 		rc = read(fd, buf, size);
+		// 	}
+		// }
+		// for(int i = 0; i < size; i++){
+		// 	rc = read(fd, buf + i, 1);
+		// 	// printf("buf %d\n", buf[i]);
+		// 	if(rc <= 0){
+		// 		// size = rc;
+		// 		break;
+		// 	}
+		// }
+		buf[size] = '\0';
+		// buf[size+1] = '0';
+		// char test;
+		// printf("test: %d %d", read_byte(fd, &test), test);
+		// printf("type: %d size: %d\n",*mode, size);
+	}else{
+		return NULL;
+	}
+	if(rc <= 0){
+		return NULL;
+	}
+	return buf;
+}
 
 
 static void epoll_ctl_add(int epfd, int fd, uint32_t events)
@@ -155,12 +226,16 @@ void input_handler(int csock, char tok[3][1000]){
 	if(strcmp(tok[0], "STATS") == 0){
 		// deadlock? 
 		pthread_mutex_lock(&putsLock);
-		pthread_mutex_lock(&getsLock);
-		pthread_mutex_lock(&kvLock);
-			sprintf(reply, "OK PUTS:%d GETS: %d KEYVALUES: %d\n", PUTS, GETS, KEYVALUES);
+		int puts = PUTS;
 		pthread_mutex_unlock(&putsLock);
+		pthread_mutex_lock(&getsLock);
+		int gets = GETS;
 		pthread_mutex_unlock(&getsLock);
+		pthread_mutex_lock(&kvLock);
+		int kv = KEYVALUES;
 		pthread_mutex_unlock(&kvLock);
+		sprintf(reply, "OK PUTS:%d GETS: %d KEYVALUES: %d\n", puts, gets, kv);
+
 		ok = 1;
 	}
 	if(ok == 0){
@@ -168,6 +243,84 @@ void input_handler(int csock, char tok[3][1000]){
 	}
 	// sprintf(reply, "%d\n", U);
 	write(csock, reply, strlen(reply));
+	return;
+}
+
+void input_handler_bin(int csock, int mode, char* key, char* val){
+	char reply[MAX_RESPONSE];
+	int ok = 0;
+	char comm;
+	printf("MODE HANDLER: %d\n", mode);
+	if(mode == 12){
+		int res = find_elem_to_delete(key);
+		if(res){
+			comm = OK;
+			write(csock, &comm, 1);
+		}else{
+			comm = ENOTFOUND;
+			write(csock, &comm, 1);
+		}
+		pthread_mutex_lock(&delsLock);
+		DELS++;
+		pthread_mutex_unlock(&delsLock);
+		pthread_mutex_lock(&kvLock);
+		KEYVALUES -= res;
+		pthread_mutex_unlock(&kvLock);
+		ok = 1;
+	}
+	if(mode == 13){
+		Word * result = find_word(key);
+		if(result == NULL){
+			// sprintf(reply, "ENOTFOUND\n");
+			// sprintf(reply, "%d", 112);
+			comm = ENOTFOUND;
+			write(csock, &comm, 1);
+		}else{
+			printf("FOUND\n");
+			comm = OK;
+			int len = strlen(result->value);
+			int len_net = htonl(len);
+			write(csock, &comm, 1);
+			write(csock, &len_net, 4);
+			write(csock, result->value, len);
+			// if(strlen(result->value) + 4 > 2048){
+			// 	sprintf(reply, "EBIG\n");
+			// }
+
+			// sprintf(reply, "OK %s\n", result->value);
+		}
+		pthread_mutex_lock(&getsLock);
+		GETS++;
+		pthread_mutex_unlock(&getsLock);
+		ok = 1;
+	}
+	if(mode == 21){
+
+		pthread_mutex_lock(&putsLock);
+		int puts = PUTS;
+		pthread_mutex_unlock(&putsLock);
+		pthread_mutex_lock(&getsLock);
+		int gets = GETS;
+		pthread_mutex_unlock(&getsLock);
+		pthread_mutex_lock(&kvLock);
+		int kv = KEYVALUES;
+		pthread_mutex_unlock(&kvLock);
+		sprintf(reply, "PUTS:%d GETS: %d KEYVALUES: %d", puts, gets, kv);
+		comm = OK;
+		int len = strlen(reply);
+		// reply[]
+		int len_net = htonl(len);
+		write(csock, &comm, 1);
+		write(csock, &len_net, 4);
+		write(csock, reply, len);
+		ok = 1;
+	}
+	if(ok == 0){
+		comm = EINVAL;
+		write(csock, &comm, 1);
+	}
+	// sprintf(reply, "%d\n", U);
+	// write(csock, reply, strlen(reply));
 	return;
 }
 
@@ -208,6 +361,41 @@ int handle_conn(int csock)
 		// }
 	}
 }
+
+int handle_conn_bin(int csock)
+{
+	// char buf[MAX_RESPONSE];
+	char *buf, *val;
+	char tok[3][1000];
+	int rc;
+	char mode = 0;
+	while (1) {
+		/* Atendemos pedidos, uno por linea */
+		buf = fd_readline_bin(csock, &mode);
+		printf("mode: %d %s\n", mode, buf);
+		if(mode == 11){
+			val = fd_readline_bin(csock, NULL);
+			printf("value: %s\n", val);
+		}
+		// if(rc == -1){
+		// 	char reply[20];
+		// 	sprintf(reply, "EINVAL\n");
+		// 	write(csock, reply, strlen(reply));
+		// 	return 2;
+		// }
+		if (buf == NULL && (mode != STATS)) {
+			/* linea vacia, se cerró la conexión */
+			close(csock);
+			return 1;
+		}
+		// parser(buf, tok);
+        input_handler_bin(csock, mode, buf, val);
+		free(buf);
+        return 2;
+
+	}
+}
+
 
 
 void * thread_f(void * arg){
@@ -283,8 +471,9 @@ void * thread_f(void * arg){
 							if((((SocketData*)events[i].data.ptr)->bin) == 0){
                             	done = handle_conn(((SocketData*)events[i].data.ptr)->fd);
 							}else{
-								done = 2;
 								printf("BINARY MODE\n");
+								done = handle_conn_bin(((SocketData*)events[i].data.ptr)->fd);
+								// done = 2;
 							}
 
 

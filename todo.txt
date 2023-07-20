@@ -3,12 +3,16 @@
 - arreglar tamaños --*
 - implementar delete --
     -revisar lastDelete y firstDelete --
-- cliente erlang
-- modo binario - puerto diferente 
-    - implementar parser binario
-- frees
+- EPOLLONESHOT - probar -- 
 - arreglar puertos--agregar otro socket, y meterlo en lsock == events[i].data.fd --
+- arreglar concurrencia borrado, actualizar lista --
+
+- modo binario - puerto diferente 
+    - implementar parser binario --
+        - ver PUT
+- frees
 - permisos
 - strtok tamaño default
-- EPOLLONESHOT - probar -- 
-- arreglar concurrencia borrado, actualizar lista --
+- cambiar sistema de locks en cola de prioridad, array paralelo de locks exclusivo para cola de prioridad, solo lockear este y no
+toda la region de la tabla hash
+- cliente erlang
