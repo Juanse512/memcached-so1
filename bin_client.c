@@ -237,20 +237,22 @@ char * input(int *lenp)
 	int off = 0, sz = 1024;
 	int rc;
     printf("read\n");
-	while ((rc = read(0, ret + off, sz - off)) > 0) {
-		off += rc;
-		if (off == sz) {
-			sz *= 2;
-			ret = realloc(ret, sz);
-		}
-	}
+	// while ((rc = read(0, ret + off, sz - off)) > 0) {
+	// 	off += rc;
+	// 	if (off == sz) {
+	// 		sz *= 2;
+	// 		ret = realloc(ret, sz);
+	// 	}
+	// }
+	scanf("%s", ret);
+	printf("%s\n", ret);
+	*lenp = strlen(ret); 
+	// if (rc < 0)
+	// 	die("input.read?");
 
-	if (rc < 0)
-		die("input.read?");
-
-	assert(rc == 0);
+	// assert(rc == 0);
 	/* OK, EOF */
-	*lenp = off;
+	// *lenp = off;
 	return ret;
 }
 
@@ -262,11 +264,10 @@ void put(const char *k)
 
 	/* Pedir */
 	{ 
+		int len;
 		int comm = PUT;
 		writen(fd, &comm, 1);
 		send_var(fd, strlen(k), k);
-
-		int len;
 		char *buf = input(&len);
 		send_var(fd, len, buf);
 		free(buf);

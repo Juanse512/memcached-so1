@@ -39,6 +39,16 @@ typedef struct SocketDataS {
 } SocketData;
 
 
+#define READ(fd, buf, n) ({						\
+	int rc = read(fd, buf, n);					\
+	if (rc < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))	\
+		return 0;						\
+	if (rc <= 0)							\
+		return -1;						\
+	rc; })
+
+
+
 /*
  * Para probar, usar netcat. Ej:
  *
@@ -63,7 +73,7 @@ int fd_readline(int fd, char *buf)
 	 * Leemos de a un caracter (no muy eficiente...) hasta
 	 * completar una línea.
 	 */
-	while ((rc = read(fd, buf + i, 1)) > 0) {
+	while ((rc = READ(fd, buf + i, 1)) > 0) {
 		if(i > 2048){
 			i = -1;
 			break;
@@ -82,7 +92,7 @@ int fd_readline(int fd, char *buf)
 }
 
 int read_byte(int fd, char* byte){
-	return read(fd, byte, 1);
+	return READ(fd, byte, 1);
 }
 
 char * fd_readline_bin(int fd, char *mode){
@@ -90,46 +100,47 @@ char * fd_readline_bin(int fd, char *mode){
 	int i = 0;
 	int size = 0;
 	char b1,b2,b3,b4;
+	int r1,r2,r3,r4;
 	char * buf;
 	if(mode != NULL){
-		rc = read(fd, mode, 1);
+		rc = READ(fd, mode, 1);
 		if(rc <= 0){
 			return 0;
 		}
 	}
-	if(read_byte(fd, &b1) && read_byte(fd, &b2) && read_byte(fd, &b3) && read_byte(fd, &b4)){
+	r1 = read_byte(fd, &b1);
+	r2 = read_byte(fd, &b2);
+	r3 = read_byte(fd, &b3);
+	r4 = read_byte(fd, &b4);
+	printf("BEF RETURN\n");
+	// printf("read bytes: %d %d %d %d %d\n", r1,r2,r3,r4);
+	if(r1 && r2 && r3 && r4){
 		size = ((int)b1 * pow(256,3)) + ((int)b2 * pow(256,2)) + ((int)b3 * pow(256,1)) + ((int)b4);
-		printf("size: %d\n", size);
+
+		printf("size: %d %d %d %d %d\n", size, (int)b1, (int)b2, (int)b3, (int)b4);
+		
 		buf = malloc(sizeof(char)*(size+2));
 		while (i < size) {
-			rc = read(fd, buf + i, size - i);
+			rc = READ(fd, buf + i, size - i);
 			if (rc <= 0)
 				break;
 			i += rc;
 		}
-		// if(mode == NULL){
-		// 	int flag = 0;
-		// 	while(flag == 0){
-		// 		rc = read(fd, buf, size);
-		// 	}
-		// }
-		// for(int i = 0; i < size; i++){
-		// 	rc = read(fd, buf + i, 1);
-		// 	// printf("buf %d\n", buf[i]);
-		// 	if(rc <= 0){
-		// 		// size = rc;
-		// 		break;
-		// 	}
-		// }
 		buf[size] = '\0';
-		// buf[size+1] = '0';
-		// char test;
-		// printf("test: %d %d", read_byte(fd, &test), test);
-		// printf("type: %d size: %d\n",*mode, size);
+		// printf("AFTER READ\n");
 	}else{
+		printf("FAILED TO READ SIZE\n");
+		// while(1){
+		// 	rc = read_byte(fd, &b1);
+		// 	if(rc){
+		// 		printf("%d\n", b1);
+		// 	}
+		// };
+		// printf("byte %d\n", b1);
 		return NULL;
 	}
 	if(rc <= 0){
+		printf("FAILED TO READ DATA %d\n", rc);
 		return NULL;
 	}
 	return buf;
@@ -251,6 +262,19 @@ void input_handler_bin(int csock, int mode, char* key, char* val){
 	int ok = 0;
 	char comm;
 	printf("MODE HANDLER: %d\n", mode);
+	if(mode == 11){
+		int res = hash_word(key, val, tableSize);
+		comm = OK;
+		write(csock, &comm, 1);
+		// sprintf(reply, "OK\n");
+		pthread_mutex_lock(&putsLock);
+		PUTS++;
+		pthread_mutex_unlock(&putsLock);
+		pthread_mutex_lock(&kvLock);
+		KEYVALUES += res;
+		pthread_mutex_unlock(&kvLock);
+		ok = 1;
+	}
 	if(mode == 12){
 		int res = find_elem_to_delete(key);
 		if(res){
@@ -268,6 +292,7 @@ void input_handler_bin(int csock, int mode, char* key, char* val){
 		pthread_mutex_unlock(&kvLock);
 		ok = 1;
 	}
+
 	if(mode == 13){
 		Word * result = find_word(key);
 		if(result == NULL){
@@ -315,10 +340,12 @@ void input_handler_bin(int csock, int mode, char* key, char* val){
 		write(csock, reply, len);
 		ok = 1;
 	}
+	
 	if(ok == 0){
 		comm = EINVAL;
 		write(csock, &comm, 1);
 	}
+	printf("AFTER HANDLER\n");
 	// sprintf(reply, "%d\n", U);
 	// write(csock, reply, strlen(reply));
 	return;
@@ -332,19 +359,20 @@ int handle_conn(int csock)
 
 	while (1) {
 		/* Atendemos pedidos, uno por linea */
+		printf("rc: %d\n", rc);
 		rc = fd_readline(csock, buf);
-		if(rc == -1){
-			char reply[20];
-			sprintf(reply, "EINVAL\n");
-			write(csock, reply, strlen(reply));
-			return 2;
-		}
-		if (rc == 0) {
+
+		// if(rc == -1){
+		// 	char reply[20];
+		// 	sprintf(reply, "EINVAL\n");
+		// 	write(csock, reply, strlen(reply));
+		// 	return 2;
+		// }
+		if (rc == 0 || rc == -1) {
 			/* linea vacia, se cerró la conexión */
 			close(csock);
 			return 1;
 		}
-        // printf("%ld\n", pthread_self());
 		parser(buf, tok);
 		// printf("%s\n", tok[2]);
         input_handler(csock, tok);
@@ -365,32 +393,34 @@ int handle_conn(int csock)
 int handle_conn_bin(int csock)
 {
 	// char buf[MAX_RESPONSE];
-	char *buf, *val;
+	char *buf = NULL;
+	char *val= NULL;
 	char tok[3][1000];
 	int rc;
 	char mode = 0;
 	while (1) {
 		/* Atendemos pedidos, uno por linea */
+		printf("ENTER HANDLE CONN BIN\n");
+
 		buf = fd_readline_bin(csock, &mode);
-		printf("mode: %d %s\n", mode, buf);
+		printf("mode: %d %p\n", mode, buf);
+		printf("AFTER READLINE BIN\n");
 		if(mode == 11){
 			val = fd_readline_bin(csock, NULL);
 			printf("value: %s\n", val);
 		}
-		// if(rc == -1){
-		// 	char reply[20];
-		// 	sprintf(reply, "EINVAL\n");
-		// 	write(csock, reply, strlen(reply));
-		// 	return 2;
-		// }
-		if (buf == NULL && (mode != STATS)) {
+		if ((buf == NULL && (mode != STATS)) || mode == 0) {
 			/* linea vacia, se cerró la conexión */
+			printf("CLOSE CSOCK\n");
 			close(csock);
 			return 1;
 		}
 		// parser(buf, tok);
         input_handler_bin(csock, mode, buf, val);
-		free(buf);
+		// printf("SEG FAULT %p\n", &mode);
+		if(buf != NULL){
+			free(buf);
+		}
         return 2;
 
 	}
@@ -440,13 +470,14 @@ void * thread_f(void * arg){
         /*              continue; */
                 }else{
 						if (binlsock == (((SocketData*)events[i].data.ptr)->fd)){
-							printf("BINARY MODE\n");
 							int infd;
 							//in_len = sizeof in_addr;
+							printf("BINARY MODE\n");
+
 							infd = accept (binlsock, NULL, NULL);
 							s = make_socket_non_blocking (infd);
 							if (s == -1)
-							abort ();
+								abort ();
 
 							// event.data.u32 = (uint32_t)1;
 							event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
@@ -471,7 +502,7 @@ void * thread_f(void * arg){
 							if((((SocketData*)events[i].data.ptr)->bin) == 0){
                             	done = handle_conn(((SocketData*)events[i].data.ptr)->fd);
 							}else{
-								printf("BINARY MODE\n");
+								printf("BINARY MODE HANDLE\n");
 								done = handle_conn_bin(((SocketData*)events[i].data.ptr)->fd);
 								// done = 2;
 							}
@@ -482,7 +513,10 @@ void * thread_f(void * arg){
                                 printf ("Closed connection on descriptor %d\n",
                                         (((SocketData*)events[i].data.ptr)->fd));
                                 close (((SocketData*)events[i].data.ptr)->fd);
-								free(events[i].data.ptr);
+								if(events[i].data.ptr){
+									free(events[i].data.ptr);
+									events[i].data.ptr = NULL;
+								}
                             }else{
 								event.events = EPOLLIN | EPOLLONESHOT;
 								((SocketData*)event.data.ptr)->fd = (((SocketData*)events[i].data.ptr)->fd);
