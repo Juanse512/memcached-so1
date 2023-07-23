@@ -82,13 +82,14 @@ Word * insert_word(Word * word, unsigned int hash, char * wordChar, char * value
             // nos quedamos sin memoria, quit?
         }
     }
-
+    int lengthValue = strlen(value);
+    int lengthWord = strlen(wordChar);
     newWord->next = NULL;
     newWord->hash = hash;
-    newWord->word = malloc(sizeof(char)*strlen(wordChar));
-    strcpy(newWord->word, wordChar);
-    newWord->value = malloc(sizeof(char)*strlen(value));
-    strcpy(newWord->value, value);
+    newWord->word = malloc(sizeof(char)*lengthWord);
+    memcpy(newWord->word, wordChar, lengthWord);
+    newWord->value = malloc(sizeof(char)*lengthValue);
+    memcpy(newWord->value, value, lengthValue);
 
     if(firstElemDelete){
         firstElemDelete->prev_delete = newWord;

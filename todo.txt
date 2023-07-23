@@ -1,20 +1,11 @@
-- locks en tabla hash --
-- implementar stats --
 - arreglar tamaños --*
-- implementar delete --
-    -revisar lastDelete y firstDelete --
-- EPOLLONESHOT - probar -- 
-- arreglar puertos--agregar otro socket, y meterlo en lsock == events[i].data.fd --
-- arreglar concurrencia borrado, actualizar lista --
-
 - modo binario - puerto diferente 
     - implementar parser binario --
-        - ver PUT
+        - ver PUT --
         - devolver EBIN en modo texto
 - frees
 - permisos
 - strtok tamaño default
 - cambiar sistema de locks en cola de prioridad, array paralelo de locks exclusivo para cola de prioridad, solo lockear este y no
 toda la region de la tabla hash
-- cliente erlang
-- arreglar problema del ruido, buffer para cada fd.
+- ruido en modo texto

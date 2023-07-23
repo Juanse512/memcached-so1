@@ -136,6 +136,7 @@ Word * find_word(char * word){
 }
 
 int hash_word(char * key, char * value,int counter){
+    int lengthValue = strlen(value);
     // int tableSize = ceil(counter / 0.7); // factor de carga 0.7
     
     // Word ** hashTable = malloc(sizeof(Word *) * (tableSize + 1));
@@ -154,7 +155,14 @@ int hash_word(char * key, char * value,int counter){
         pthread_mutex_unlock(lock);
         ret = 1;
     }else{
-        foundPos->value = value;
+        printf("FOUND MATCH %s\n", value);
+        free(foundPos->value);
+        foundPos->value = malloc(sizeof(char)*lengthValue);
+        memcpy(foundPos->value, value, lengthValue);
+        // foundPos->value = value;
+        
+        //free del value viejo
+        ret = 1;
     }
     
     // *size = tableSize;
