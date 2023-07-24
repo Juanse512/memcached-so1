@@ -1,11 +1,6 @@
 - arreglar tamaños --*
-- modo binario - puerto diferente 
-    - implementar parser binario --
-        - ver PUT --
-        - devolver EBIN en modo texto
 - frees
 - permisos
 - strtok tamaño default
 - cambiar sistema de locks en cola de prioridad, array paralelo de locks exclusivo para cola de prioridad, solo lockear este y no
 toda la region de la tabla hash
-- ruido en modo texto

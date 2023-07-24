@@ -80,7 +80,7 @@ unsigned int hash_first(char * word){
 
 
 
-Word * find_word(char * word){
+Word * find_word(char * word, int len){
     unsigned int first_hash = hash_first(word);
     unsigned int position = first_hash % tableSize;
     int flag = 1;
@@ -92,8 +92,11 @@ Word * find_word(char * word){
     printf("hash: %ld", strlen(word));
     while(aux != NULL && flag != 0){
         if(aux->hash == first_hash){
-            if(aux->word != NULL){ 
-                if(strcmp(word, aux->word) == 0){
+            if(aux->word.string != NULL){ 
+                CompString wordString;
+                wordString.string = word;
+                wordString.len = len;
+                if(compare_string(wordString, aux->word) == 0){
                     returnValue = aux;
                     if(returnValue->prev_delete != NULL){
                         pthread_mutex_lock(&lastElemLock);
@@ -135,15 +138,15 @@ Word * find_word(char * word){
     return returnValue;
 }
 
-int hash_word(char * key, char * value,int counter){
-    int lengthValue = strlen(value);
+int hash_word(char * key, char * value,int counter, int keyLength, int valueLength, int mode){
+    // int lengthValue = strlen(value);
     // int tableSize = ceil(counter / 0.7); // factor de carga 0.7
     
     // Word ** hashTable = malloc(sizeof(Word *) * (tableSize + 1));
     
     // clean_array(hashTable, tableSize);
     int ret = 0;
-    Word * foundPos = find_word(key);
+    Word * foundPos = find_word(key, keyLength);
     if(foundPos == NULL){
         unsigned int firstHash = 0, position = 0;
         
@@ -151,14 +154,16 @@ int hash_word(char * key, char * value,int counter){
         position = firstHash % counter;
         pthread_mutex_t* lock = get_lock(position);
         pthread_mutex_lock(lock);
-        hashTable[position] = insert_word(hashTable[position], firstHash, key, value);
+        hashTable[position] = insert_word(hashTable[position], firstHash, key, value, keyLength, valueLength, mode);
         pthread_mutex_unlock(lock);
         ret = 1;
     }else{
         printf("FOUND MATCH %s\n", value);
-        free(foundPos->value);
-        foundPos->value = malloc(sizeof(char)*lengthValue);
-        memcpy(foundPos->value, value, lengthValue);
+        free(foundPos->value.string);
+        foundPos->value.string = malloc(sizeof(char)*valueLength);
+        memcpy(foundPos->value.string, value, valueLength);
+        foundPos->value.len = valueLength;
+        foundPos->bin = mode;
         // foundPos->value = value;
         
         //free del value viejo
@@ -169,7 +174,7 @@ int hash_word(char * key, char * value,int counter){
     return ret;
 }
 
-int find_elem_to_delete(char * word){
+int find_elem_to_delete(char * word, int len){
     unsigned int first_hash = hash_first(word);
     unsigned int position = first_hash % tableSize;
     int flag = 0;
@@ -177,14 +182,18 @@ int find_elem_to_delete(char * word){
     pthread_mutex_lock(lock);
     Word * aux = hashTable[position];
     Word * returnValue = NULL;
+    CompString wordString;
+    wordString.string = word;
+    wordString.len = len;
     printf("%p\n", aux);
     if(aux){
         if(aux->hash == first_hash){
-            if(aux->word != NULL){ 
-                    if(strcmp(word, aux->word) == 0){
+            if(aux->word.string != NULL){ 
+                    
+                    if(compare_string(wordString, aux->word) == 0){
                         hashTable[position] = aux->next;
-                        free(aux->word);
-                        free(aux->value);
+                        free(aux->word.string);
+                        free(aux->value.string);
                         free(aux);
                         flag = 1;
                     }
@@ -192,8 +201,8 @@ int find_elem_to_delete(char * word){
         }else{
             while(aux->next != NULL){
                 if(aux->next->hash == first_hash){
-                    if(aux->next->word != NULL){ 
-                        if(strcmp(word, aux->next->word) == 0){
+                    if(aux->next->word.string != NULL){ 
+                        if(compare_string(wordString, aux->next->word) == 0){
                             delete_element(aux, aux->next);
                             flag = 1;
                             break;

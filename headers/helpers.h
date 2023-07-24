@@ -10,9 +10,17 @@
 // word: contiene la palabra, no se una en la tabla hash original del diccionario
 // hash: hash de la palabra
 // next: puntero al Word siguiente
+
+typedef struct CompStringStruct{
+  char * string;
+  int len;
+} CompString;
+
+
 typedef struct WordStruct{
-  char * word;
-  char * value;
+  CompString word;
+  CompString value;
+  int bin;
   unsigned int hash;
   struct WordStruct* next_delete;
   struct WordStruct* prev_delete;
@@ -37,7 +45,7 @@ void clean_array(Word ** hashTable, int counter);
 
 //insert_word: (int, Word *,unsigned int, char *) -> (Word*)
 // Toma una palabra o el indice de una y la coloca al final de la Word que le pasamos, devuelve la Word actualizada
-Word * insert_word(Word * word, unsigned int hash, char * wordChar, char * value);
+Word * insert_word(Word * word, unsigned int hash, char * wordChar, char * value, int lengthWord, int lengthValue, int mode);
 
 //save_word: (char *, char **, int) -> ()
 // Guarda una palabra en el array que le pasamos, en la posicion dada
@@ -66,5 +74,7 @@ void parser(char* str, char tok[3][1000]);
 pthread_mutex_t* get_lock(int position);
 
 void delete_element(Word * prev, Word * actual);
+
+int compare_string(CompString s1, CompString s2);
 
 #endif

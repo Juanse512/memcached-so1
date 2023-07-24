@@ -7,6 +7,7 @@
 #include <string.h>
 #include <pthread.h>
 #include "../headers/io.h"
+#include "../headers/hashing.h"
 
 char * parse_word(char * word){
     char * parsedWord = malloc(sizeof(char) * strlen(word) + 2);
@@ -23,7 +24,7 @@ char * parse_word(char * word){
 void free_accepted(Word ** acceptedWords){   
     for(int i = 0; i < 6; i++){
         if(acceptedWords[i] != NULL){
-            free(acceptedWords[i]->word);
+            free(acceptedWords[i]->word.string);
             free(acceptedWords[i]);
         }
     }
@@ -45,7 +46,7 @@ void free_all(char * dictionary[], Word ** hashTable, int tableSize, int dicSize
 void free_list(Word * word){
     if(word == NULL)
         return;
-    if(word->word != NULL) free(word->word);
+    if(word->word.string != NULL) free(word->word.string);
     Word * next = word->next;
     free(word);
     free_list(next);
@@ -68,29 +69,29 @@ char *** check_len(char ** array[], int counter, int * arraySize){
 //     strcpy(dictionary[index], word);
 // }
 
-Word * insert_word(Word * word, unsigned int hash, char * wordChar, char * value){
+Word * insert_word(Word * word, unsigned int hash, char * wordChar, char * value, int lengthWord, int lengthValue, int mode){
     Word * newWord = malloc(sizeof(Word));
 
     while(newWord == NULL){
         if(lastElemDelete){
             Word * aux = lastElemDelete->prev_delete;
-            free(lastElemDelete->word);
-            free(lastElemDelete->value);
+            free(lastElemDelete->word.string);
+            free(lastElemDelete->value.string);
             free(lastElemDelete);
             lastElemDelete = aux;
         }else{
             // nos quedamos sin memoria, quit?
         }
     }
-    int lengthValue = strlen(value);
-    int lengthWord = strlen(wordChar);
     newWord->next = NULL;
     newWord->hash = hash;
-    newWord->word = malloc(sizeof(char)*lengthWord);
-    memcpy(newWord->word, wordChar, lengthWord);
-    newWord->value = malloc(sizeof(char)*lengthValue);
-    memcpy(newWord->value, value, lengthValue);
-
+    newWord->word.string = malloc(sizeof(char)*lengthWord);
+    memcpy(newWord->word.string, wordChar, lengthWord);
+    newWord->word.len = lengthWord;
+    newWord->value.string = malloc(sizeof(char)*lengthValue);
+    memcpy(newWord->value.string, value, lengthValue);
+    newWord->value.len = lengthValue;
+    newWord->bin = mode;
     if(firstElemDelete){
         firstElemDelete->prev_delete = newWord;
     }
@@ -208,8 +209,22 @@ void delete_element(Word * prev, Word * actual){
         firstElemDelete = actual->next_delete;
     }
     prev->next = actual->next;
-    free(actual->word);
-    free(actual->value);
+    free(actual->word.string);
+    free(actual->value.string);
     free(actual);
     return;
+}
+
+
+int compare_string(CompString s1, CompString s2){
+    if(s1.len != s2.len)
+        return 1;
+    char * word1 = s1.string;
+    char * word2 = s2.string;
+    int res = 0;
+    for(int i = 0; i < s1.len; i++){
+        if(word1[i] != word2[i])
+            res = 1;
+    }
+    return res;
 }

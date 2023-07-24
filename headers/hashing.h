@@ -16,14 +16,14 @@ unsigned int hash_first(char * word);
 // Toma el diccionario, un contador del tamaño de este y un puntero a int que indica el tamaño de la nueva tabla hash
 // Word ** hash_words(char * dictionary[], int counter, int * size);
 
-int hash_word(char * key, char * value,int counter);
+int hash_word(char * key, char * value,int counter, int keyLength, int valueLength, int mode);
 
 //find_word: (char *, char **, Word **, int, int) -> (int)
 // Busca una palabra en la tabla hash
 // Toma una palabra, el diccionario, la tabla hash, el tamaño de esta y un entero que indica la distancia de la palabra a la palabra original, este ultimo argumento 
 // es opcional, devuelve 1 si se encuentra, 0 si no
-Word * find_word(char * word);
+Word * find_word(char * word, int len);
 
-int find_elem_to_delete(char * word);
+int find_elem_to_delete(char * word, int len);
 
 #endif

@@ -119,15 +119,15 @@ int U = 0;
 int read_byte(int fd, char* byte){
 	return READ(fd, byte, 1);
 }
-void input_handler_bin(int csock, int mode, char* key, char* val){
+void input_handler_bin(int csock, int mode, char* key, char* val, int keyLen, int valLen){
 	char reply[MAX_RESPONSE];
 	int ok = 0;
 	char comm;
 	printf("MODE HANDLER: %d\n", mode);
 	if(mode == 11){
 		// guardar en buf
-		printf("VALUE HASH WORD %s\n", val);
-		int res = hash_word(key, val, tableSize);
+		printf("VALUE HASH WORD %s %d\n", val, valLen);
+		int res = hash_word(key, val, tableSize, keyLen, valLen, 1);
 		comm = OK;
 		write(csock, &comm, 1);
 		// sprintf(reply, "OK\n");
@@ -140,7 +140,7 @@ void input_handler_bin(int csock, int mode, char* key, char* val){
 		ok = 1;
 	}
 	if(mode == 12){
-		int res = find_elem_to_delete(key);
+		int res = find_elem_to_delete(key, keyLen);
 		if(res){
 			comm = OK;
 			write(csock, &comm, 1);
@@ -158,7 +158,7 @@ void input_handler_bin(int csock, int mode, char* key, char* val){
 	}
 
 	if(mode == 13){
-		Word * result = find_word(key);
+		Word * result = find_word(key, keyLen);
 		if(result == NULL){
 			// sprintf(reply, "ENOTFOUND\n");
 			// sprintf(reply, "%d", 112);
@@ -167,11 +167,11 @@ void input_handler_bin(int csock, int mode, char* key, char* val){
 		}else{
 			printf("FOUND\n");
 			comm = OK;
-			int len = strlen(result->value);
+			int len = result->value.len;
 			int len_net = htonl(len);
 			write(csock, &comm, 1);
 			write(csock, &len_net, 4);
-			write(csock, result->value, len);
+			write(csock, result->value.string, len);
 			// if(strlen(result->value) + 4 > 2048){
 			// 	sprintf(reply, "EBIG\n");
 			// }
@@ -283,6 +283,10 @@ int parse_text_bin(int fd, char * buf, int buf_size, int index){
 	if(index >= buf_size){
 		return 0;
 	}
+	if(buf_size == 1 && buf[0] == STATS){
+		input_handler_bin(fd, STATS, NULL, NULL, 0, 0);
+		return parse_text_bin(fd, buf, buf_size, index + 1);
+	}
 	if(buf_size < 5){
 		return -1;
 	}
@@ -292,7 +296,7 @@ int parse_text_bin(int fd, char * buf, int buf_size, int index){
 	char * value = NULL;
 
 	int size = ((int)buf[index+1] * pow(256,3)) + ((int)buf[index+2] * pow(256,2)) + ((int)buf[index+3] * pow(256,1)) + ((int)buf[index+4]);
-	
+	int vSize = 0;
 	if((buf_size-5-index) < size){
 		printf("%d %d %d\n", buf_size, index, size);
 
@@ -315,22 +319,22 @@ int parse_text_bin(int fd, char * buf, int buf_size, int index){
 	printf("key: %s mode: %d\n", key, buf[0]);
 	index = (size + index + 5);
 	if(mode == PUT){
-		int size = ((int)buf[index] * pow(256,3)) + ((int)buf[index+1] * pow(256,2)) + ((int)buf[index+2] * pow(256,1)) + ((int)buf[index+3]);
+		vSize = ((int)buf[index] * pow(256,3)) + ((int)buf[index+1] * pow(256,2)) + ((int)buf[index+2] * pow(256,1)) + ((int)buf[index+3]);
 		printf("HERE %d %d %d %d\n", (int)buf[index+1], (int)buf[index+2], ((int)buf[index+3]), (int)buf[index+4]);
-		if((buf_size-4-index) < size){
+		if((buf_size-4-index) < vSize){
 
 			return -1;
 		}
 
-		value = malloc(sizeof(char)*size);
+		value = malloc(sizeof(char)*vSize);
 		k = 0;
-		for(int i = (index + 4); i < (size+index+4); i++){
+		for(int i = (index + 4); i < (vSize+index+4); i++){
 			value[k++] = buf[i];
 		}
-		index = (size + index + 4);
+		index = (vSize + index + 4);
 	}
 	// llamar a handle 
-	input_handler_bin(fd, mode, key, value);
+	input_handler_bin(fd, mode, key, value, size, vSize);
 	printf("BEFORE FREE\n");
 	if(key){
 		free(key);
@@ -341,35 +345,25 @@ int parse_text_bin(int fd, char * buf, int buf_size, int index){
 	return parse_text_bin(fd, buf, buf_size, index);
 }
 
-int parse_text(int fd, char * buf, int buf_size, int index){
-	if(index >= buf_size){
-		return 0;
-	}
-	if(buf_size < 5){
-		return -1;
-	}
-	
-	int mode = buf[index];
-	char * key = NULL;
-	char * value = NULL;
-
-	int size = ((int)buf[index+1] * pow(256,3)) + ((int)buf[index+2] * pow(256,2)) + ((int)buf[index+3] * pow(256,1)) + ((int)buf[index+4]);
-	
-}
 
 void input_handler(int csock, char tok[3][1000]){
 	char reply[MAX_RESPONSE];
 	int ok = 0;
 	if(strcmp(tok[0], "GET") == 0){
 		printf("KEY %s\n", tok[1]);
-		Word * result = find_word(tok[1]);
+		Word * result = find_word(tok[1], strlen(tok[1]));
 		if(result == NULL){
 			sprintf(reply, "ENOTFOUND\n");
 		}else{
-			if(strlen(result->value) + 4 > 2048){
-				sprintf(reply, "EBIG\n");
+			if(result->bin){
+				sprintf(reply, "EBIN\n");
+			}else{
+				if(result->value.len + 4 > 2048){
+					sprintf(reply, "EBIG\n");
+				}else{
+					sprintf(reply, "OK %s\n", result->value.string);
+				}
 			}
-			sprintf(reply, "OK %s\n", result->value);
 		}
 		pthread_mutex_lock(&getsLock);
 		GETS++;
@@ -378,7 +372,7 @@ void input_handler(int csock, char tok[3][1000]){
 	}
 	if(strcmp(tok[0], "PUT") == 0){
 		printf("KEY %s\n", tok[1]);
-		int res = hash_word(tok[1], tok[2], tableSize);
+		int res = hash_word(tok[1], tok[2], tableSize, strlen(tok[1]), strlen(tok[2]), 0);
 		sprintf(reply, "OK\n");
 		pthread_mutex_lock(&putsLock);
 		PUTS++;
@@ -390,7 +384,7 @@ void input_handler(int csock, char tok[3][1000]){
 	}
 
 	if(strcmp(tok[0], "DEL") == 0){
-		int res = find_elem_to_delete(tok[1]);
+		int res = find_elem_to_delete(tok[1], strlen(tok[1]));
 		if(res){
 			sprintf(reply, "OK\n");
 		}else{
