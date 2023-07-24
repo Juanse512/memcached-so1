@@ -6,6 +6,9 @@
 #include <ctype.h>
 #include <string.h>
 #include <pthread.h>
+#include <sys/sysinfo.h>
+#include <unistd.h>
+
 #include "../headers/io.h"
 #include "../headers/hashing.h"
 
@@ -73,15 +76,8 @@ Word * insert_word(Word * word, unsigned int hash, char * wordChar, char * value
     Word * newWord = malloc(sizeof(Word));
 
     while(newWord == NULL){
-        if(lastElemDelete){
-            Word * aux = lastElemDelete->prev_delete;
-            free(lastElemDelete->word.string);
-            free(lastElemDelete->value.string);
-            free(lastElemDelete);
-            lastElemDelete = aux;
-        }else{
-            // nos quedamos sin memoria, quit?
-        }
+        freeMemory();
+        newWord = malloc(sizeof(Word));
     }
     newWord->next = NULL;
     newWord->hash = hash;
@@ -131,6 +127,16 @@ void init(){
       // ver tamaño de hashTable, asignar memoria dependiendo de la memoria disponible
     // https://stackoverflow.com/questions/14386856/c-check-currently-available-free-ram
     //TEMP FIX:
+    printf(
+        "sysconf(_SC_AVPHYS_PAGES) * sysconf(_SC_PAGESIZE) = 0x%lX\n",
+        sysconf(_SC_AVPHYS_PAGES) * sysconf(_SC_PAGESIZE)
+    );
+    long long free_ram = sysconf(_SC_AVPHYS_PAGES) * sysconf(_SC_PAGESIZE);
+    if(free_ram > 80000){
+        free_ram = 80000;
+    }
+    tableSize = free_ram / (sizeof(Word *) / 4);
+    printf("tableSize %d %ld\n", tableSize, (sizeof(Word *) / 4));
     PUTS = 0;
     GETS = 0;
     DELS = 0;
@@ -161,7 +167,7 @@ void init(){
     }
     firstElemDelete = NULL;
     lastElemDelete = NULL;
-    tableSize = 100;
+    // tableSize = 100;
     lockSize = tableSize / 10;
     locks = malloc((sizeof(pthread_mutex_t) * lockSize) + 1);
     for(int i = 0; i < lockSize; i++){
@@ -227,4 +233,17 @@ int compare_string(CompString s1, CompString s2){
             res = 1;
     }
     return res;
+}
+
+void freeMemory(){
+    if(lastElemDelete){
+        Word * aux = lastElemDelete->prev_delete;
+        free(lastElemDelete->word.string);
+        free(lastElemDelete->value.string);
+        free(lastElemDelete);
+        lastElemDelete = aux;
+    }else{
+        // nos quedamos sin memoria, quit?
+    }
+    return;
 }

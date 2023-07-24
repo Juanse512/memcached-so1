@@ -14,6 +14,7 @@
 
 #include "../headers/helpers.h"
 #include "../headers/hashing.h"
+#include "../headers/io.h"
 
 enum code {
 	PUT = 11,
@@ -251,6 +252,10 @@ int text_consume_bin(int fd, char ** buf_p, int * index, int * size, int * a_siz
 	if(*buf_p == NULL || size == 0){
 		*a_size = 2049;
 		buf = malloc(sizeof(char) * (*a_size));
+		while(buf == NULL){
+			freeMemory();
+			buf = malloc(sizeof(char) * (*a_size));
+		}
 	}else{
 		buf = *buf_p;
 	}
@@ -309,6 +314,10 @@ int parse_text_bin(int fd, char * buf, int buf_size, int index){
 	}
 
 	key = malloc(sizeof(char)*(size+1));
+	while(key == NULL){
+		freeMemory();
+		key = malloc(sizeof(char)*(size+1));
+	}
 	int k = 0;
 	// liberar memoria de nuevo?
 
@@ -326,7 +335,11 @@ int parse_text_bin(int fd, char * buf, int buf_size, int index){
 			return -1;
 		}
 
-		value = malloc(sizeof(char)*vSize);
+		value = malloc(sizeof(char)*(vSize+1));
+		while(value == NULL){
+			freeMemory();
+			value = malloc(sizeof(char)*(vSize+1));
+		}
 		k = 0;
 		for(int i = (index + 4); i < (vSize+index+4); i++){
 			value[k++] = buf[i];
@@ -426,13 +439,10 @@ void input_handler(int csock, char tok[3][1000]){
 
 int handle_conn(SocketData * event)
 {
-	char buf[MAX_RESPONSE];
 	char tok[3][1000];
-	int rc;
 	int res_text;
 	while (1) {
 		/* Atendemos pedidos, uno por linea */
-		printf("rc: %d\n", rc);
 		// rc = fd_readline(csock, buf);
 		res_text = text_consume(event->fd, &(event->buf), &(event->index), &(event->size), &(event->a_len));
 		if(res_text == 0){
@@ -468,12 +478,7 @@ int handle_conn(SocketData * event)
 int handle_conn_bin(SocketData * event)
 {
 	// char buf[MAX_RESPONSE];
-	char *buf = NULL;
-	char *val= NULL;
-	char tok[3][1000];
 	int res, res_text;
-	char mode = 0;
-	int done;
 	while (1) {
 		printf("HANDLE CON BINN NEW\n");
 
@@ -506,12 +511,9 @@ int handle_conn_bin(SocketData * event)
 void * thread_f(void * arg){
     int lsock = arg - (void*)0;
     int nfds; //lleva la cantidad de fds listos para E/S
+	int efd, s;
     struct epoll_event events[10]; // ver max events
 	struct epoll_event event;
-	int s;
-	int efd;
-	int bin = 1;
-	int text = 0;
     while(1){
         nfds = epoll_wait(epfd, events, 10, -1);  //chequear error
         for (int i = 0; i < nfds; i++) {
@@ -588,8 +590,6 @@ void * thread_f(void * arg){
 						}else{
                             int done = 0;
 
-                            ssize_t count;
-                            char buf[512];
 							printf("type: %d\n", (eventData->bin));
 							// int type = *((int*)events[i].data.ptr);
 							if((eventData->bin) == 0){
@@ -627,11 +627,6 @@ void * thread_f(void * arg){
 void wait_for_clients(int lsock)
 {
 	// int csock;
-	int nfds; //lleva la cantidad de fds listos para E/S
-	struct epoll_event events[10];
-	struct epoll_event event;
-	int s;
-	int efd;
     int number_of_processors = sysconf(_SC_NPROCESSORS_ONLN);
     pthread_t clientes[number_of_processors+1];
     for (int i = 0; i < number_of_processors; i++){

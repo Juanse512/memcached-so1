@@ -77,4 +77,5 @@ void delete_element(Word * prev, Word * actual);
 
 int compare_string(CompString s1, CompString s2);
 
+void freeMemory();
 #endif
