@@ -116,33 +116,6 @@ int U = 0;
 //     exit(0);
 // }
 
-int fd_readline(int fd, char *buf)
-{
-	int rc;
-	int i = 0;
-
-	/*
-	 * Leemos de a un caracter (no muy eficiente...) hasta
-	 * completar una línea.
-	 */
-	while ((rc = READ(fd, buf + i, 1)) > 0) {
-		if(i > 2048){
-			i = -1;
-			break;
-		}
-		
-		if (buf[i] == '\n')
-			break;
-		i++;
-	}
-
-	if (rc < 0)
-		return rc;
-
-	buf[i] = 0;
-	return i;
-}
-
 int read_byte(int fd, char* byte){
 	return READ(fd, byte, 1);
 }
@@ -241,8 +214,9 @@ void input_handler_bin(int csock, int mode, char* key, char* val){
 	// write(csock, reply, strlen(reply));
 	return;
 }
-int text_consume_bin(int fd, char ** buf_p, int * index, int * size, int * a_size){
+int text_consume(int fd, char ** buf_p, int * index, int * size, int * a_size){
 	char * buf;
+	int valid = -1;
 	if(*buf_p == NULL || size == 0){
 		*a_size = 2049;
 		buf = malloc(sizeof(char) * (*a_size));
@@ -251,18 +225,48 @@ int text_consume_bin(int fd, char ** buf_p, int * index, int * size, int * a_siz
 	}
 	int rc = 1;
 	int i = *size;
-	char * mode;
+	while ((rc = read(fd, buf + i, 1)) > 0) {
+		if (buf[i] == '\n'){
+			valid = 1;
+			break;
+
+		}
+		i++;
+		if(i >= *a_size)
+			return -2;
+		
+	}
+	if(i == *size){
+		return 0;
+	}
+	buf[i] = '\0';
+	*size = i;
+	*buf_p = buf;
+	
+	printf("AFTER TEXT CONSUME %s\n", buf);
+	return valid;
+}
+int text_consume_bin(int fd, char ** buf_p, int * index, int * size, int * a_size){
+	char * buf;
+	if(*buf_p == NULL || size == 0){
+		*a_size = 2049;
+		buf = malloc(sizeof(char) * (*a_size));
+	}else{
+		buf = *buf_p;
+	}
+	int rc; // = 1;
+	int i = *size;
 	while ((rc = read(fd, buf + i, 1)) > 0) {
 		// rc = read(fd, buf + i, 1);
 		printf("rc %d %d %d\n", rc, buf[i], i);
 		i++;
 		
-		// if(i >= *a_size){
-		// 	*a_size = (*a_size) * 2;
-		// 	*buf_p = realloc(*buf_p, (*a_size));
-		// 	buf = *buf_p;
-		// 	// eliminar si no hay memoria?
-		// }
+		if(i >= *a_size){
+			*a_size = (*a_size) * 2;
+			*buf_p = realloc(*buf_p, (*a_size));
+			buf = *buf_p;
+			// eliminar si no hay memoria?
+		}
 	}
 	if(i == *size){
 		return 0;
@@ -275,6 +279,7 @@ int text_consume_bin(int fd, char ** buf_p, int * index, int * size, int * a_siz
 
 int parse_text_bin(int fd, char * buf, int buf_size, int index){
 	printf("parse txt bin %d %d\n", buf_size, index);
+	// MODO STATS
 	if(index >= buf_size){
 		return 0;
 	}
@@ -336,64 +341,27 @@ int parse_text_bin(int fd, char * buf, int buf_size, int index){
 	return parse_text_bin(fd, buf, buf_size, index);
 }
 
-
-
-char * fd_readline_bin(int fd, char *mode, int * rem_characters, char * mode_st, int * done){
-	int rc;
-	int i = 0;
-	int size = 0;
-	char b1,b2,b3,b4;
-	int r1,r2,r3,r4;
-	char * buf;
-	*done = 0;
-	if(mode != NULL){
-		rc = READ(fd, mode, 1);
-		if(rc <= 0){
-			return 0;
-		}
-		*mode_st = *mode; 
-		printf("MODE ST %d\n", *mode_st);
+int parse_text(int fd, char * buf, int buf_size, int index){
+	if(index >= buf_size){
+		return 0;
 	}
-	r1 = read_byte(fd, &b1);
-	r2 = read_byte(fd, &b2);
-	r3 = read_byte(fd, &b3);
-	r4 = read_byte(fd, &b4);
+	if(buf_size < 5){
+		return -1;
+	}
 	
-	// printf("read bytes: %d %d %d %d %d\n", r1,r2,r3,r4);
-	if(r1 && r2 && r3 && r4){
+	int mode = buf[index];
+	char * key = NULL;
+	char * value = NULL;
 
-		size = ((int)b1 * pow(256,3)) + ((int)b2 * pow(256,2)) + ((int)b3 * pow(256,1)) + ((int)b4);
-		// *size_st = size;
-		printf("size: %d %d %d %d %d\n", size, (int)b1, (int)b2, (int)b3, (int)b4);
-		
-		buf = malloc(sizeof(char)*(size+2));
-		while (i < size) {
-			rc = READ(fd, buf + i, size - i);
-			if (rc <= 0)
-				break;
-			i += rc;
-		}
-		buf[size] = '\0';
-		*done = 1;
-		// printf("AFTER READ\n");
-	}else{
-		printf("FAILED TO READ SIZE\n");
-		*rem_characters = 0;
-		// return buf;
-	}
-	if(rc <= 0){
-		printf("FAILED TO READ DATA %d\n", rc);
-		*rem_characters = (size - i);
-		// return NULL;
-	}
-	return buf;
+	int size = ((int)buf[index+1] * pow(256,3)) + ((int)buf[index+2] * pow(256,2)) + ((int)buf[index+3] * pow(256,1)) + ((int)buf[index+4]);
+	
 }
-
 
 void input_handler(int csock, char tok[3][1000]){
 	char reply[MAX_RESPONSE];
 	int ok = 0;
 	if(strcmp(tok[0], "GET") == 0){
+		printf("KEY %s\n", tok[1]);
 		Word * result = find_word(tok[1]);
 		if(result == NULL){
 			sprintf(reply, "ENOTFOUND\n");
@@ -409,6 +377,7 @@ void input_handler(int csock, char tok[3][1000]){
 		ok = 1;
 	}
 	if(strcmp(tok[0], "PUT") == 0){
+		printf("KEY %s\n", tok[1]);
 		int res = hash_word(tok[1], tok[2], tableSize);
 		sprintf(reply, "OK\n");
 		pthread_mutex_lock(&putsLock);
@@ -461,42 +430,44 @@ void input_handler(int csock, char tok[3][1000]){
 
 
 
-int handle_conn(int csock)
+int handle_conn(SocketData * event)
 {
 	char buf[MAX_RESPONSE];
 	char tok[3][1000];
 	int rc;
-
+	int res_text;
 	while (1) {
 		/* Atendemos pedidos, uno por linea */
 		printf("rc: %d\n", rc);
-		rc = fd_readline(csock, buf);
-
-		// if(rc == -1){
-		// 	char reply[20];
-		// 	sprintf(reply, "EINVAL\n");
-		// 	write(csock, reply, strlen(reply));
-		// 	return 2;
-		// }
-		if (rc == 0 || rc == -1) {
-			/* linea vacia, se cerró la conexión */
-			close(csock);
+		// rc = fd_readline(csock, buf);
+		res_text = text_consume(event->fd, &(event->buf), &(event->index), &(event->size), &(event->a_len));
+		if(res_text == 0){
+			printf("CLOSE CSOCK\n");
+			close(event->fd);
 			return 1;
 		}
-		parser(buf, tok);
-		// printf("%s\n", tok[2]);
-        input_handler(csock, tok);
+		if(res_text == -1){
+			return 2;
+		}
+		if(res_text == -2){
+			// EBIG
+			return 2;
+		}
+		parser(event->buf, tok);
+		input_handler(event->fd, tok);
+		if(res_text == 1){
+			printf("BEFORE FREE RES\n");
+			if(event->buf)
+				free(event->buf);
+			
+			event->buf = NULL;
+			event->a_len = 0;
+			event->index = 0;
+			event->size = 0;
+		}
+
         return 2;
-		// if (!strcmp(buf, "NUEVO")) {
-		// 	char reply[20];
-		// 	sprintf(reply, "%d\n", U);
-		// 	U++;
-		// 	write(csock, reply, strlen(reply));
-		// 	return 2;
-		// } else if (!strcmp(buf, "CHAU")) {
-		// 	close(csock);
-		// 	return 1;
-		// }
+
 	}
 }
 
@@ -511,10 +482,7 @@ int handle_conn_bin(SocketData * event)
 	int done;
 	while (1) {
 		printf("HANDLE CON BINN NEW\n");
-		// if(!(event->buf)){
-		// 	printf("malloc'd\n");
-		// 	event->buf = malloc(sizeof(char) * (event->size));
-		// }
+
 		printf("EVENT: %d SIZE: %d\n", event->fd, event->size);
 
 		res_text = text_consume_bin(event->fd, &(event->buf), &(event->index), &(event->size), &(event->a_len));
@@ -536,51 +504,6 @@ int handle_conn_bin(SocketData * event)
 			event->size = 0;
 		}
 		return 2;
-		/* Atendemos pedidos, uno por linea */
-		// if(socket_buffer == NULL){
-		// 	printf("ENTER HANDLE CONN BIN\n");
-
-		// 	buf = fd_readline_bin(csock, &mode, rem_char, mode_st, &done);
-		// 	printf("mode: %d %p\n", mode, buf);
-		// 	printf("AFTER READLINE BIN\n");
-		// 	if(mode == 11){
-		// 		// guardar en socket buffer
-		// 		val = fd_readline_bin(csock, NULL, rem_char, mode_st, &done);
-		// 		if(done == 0){
-		// 			*socket_buffer_point = buf;
-		// 			return 2;
-		// 		}
-		// 		// printf("value: %s\n", val);
-		// 	}
-		// 	if ((buf == NULL && (mode != STATS)) || mode == 0) {
-		// 		/* linea vacia, se cerró la conexión */
-		// 		printf("CLOSE CSOCK\n");
-		// 		close(csock);
-		// 		return 1;
-		// 	}
-		// 	// parser(buf, tok);
-		// 	input_handler_bin(csock, mode, buf, val);
-		// 	// printf("SEG FAULT %p\n", &mode);
-		// 	if(buf != NULL && rem_char == 0){
-		// 		free(buf);
-		// 	}
-		// 	return 2;
-		// }else{
-		// 	printf("IN READIN VALUE %d\n", *rem_char);
-		// 	if(*rem_char == 0){
-
-		// 		val = fd_readline_bin(csock, NULL, rem_char, NULL, &done);
-		// 		printf("READ VALUE %s %d\n", val, *mode_st);
-		// 		input_handler_bin(csock, *mode_st, socket_buffer, val);
-		// 		free(socket_buffer);
-		// 		free(val);
-		// 		*socket_buffer_point = NULL;
-		// 		*rem_char = 0;
-		// 		*mode_st = 0;
-		// 		return 2;
-		// 	}
-		// }
-
 	}
 }
 
@@ -616,9 +539,14 @@ void * thread_f(void * arg){
                         event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
                         // event.data.fd = infd;
 						
-						event.data.ptr = malloc(sizeof(SocketData));
-						((SocketData*)event.data.ptr)->fd = infd;
-						((SocketData*)event.data.ptr)->bin = 0;
+						SocketData* ctx = malloc(sizeof(SocketData));
+						ctx->fd = infd;
+						ctx->bin = 0;
+						ctx->buf = NULL;
+						ctx->index = 0; 
+						ctx->size = 0; 
+						ctx->a_len = 2049; 
+						event.data.ptr = ctx;
                         printf("set events %u, infd=%d\n", event.events, infd);
                         s = epoll_ctl (epfd, EPOLL_CTL_ADD, infd, &event);
                         if (s == -1)
@@ -626,6 +554,9 @@ void * thread_f(void * arg){
                             perror ("epoll_ctl");
                             abort ();
                         }
+						event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+						event.data.ptr = eventData;
+						epoll_ctl(efd, EPOLL_CTL_MOD, eventData->fd, &event);
         /*              continue; */
                 }else{
 						if (binlsock == (eventData->fd)){
@@ -647,6 +578,7 @@ void * thread_f(void * arg){
 							ctx->buf = NULL;
 							ctx->index = 0; 
 							ctx->size = 0; 
+							ctx->a_len = 2049; 
 							event.data.ptr = ctx;
 							printf("set events %u, infd=%d\n", event.events, infd);
 							s = epoll_ctl (epfd, EPOLL_CTL_ADD, infd, &event);
@@ -667,7 +599,7 @@ void * thread_f(void * arg){
 							printf("type: %d\n", (eventData->bin));
 							// int type = *((int*)events[i].data.ptr);
 							if((eventData->bin) == 0){
-                            	done = handle_conn(eventData->fd);
+                            	done = handle_conn(eventData);
 							}else{
 								printf("BINARY MODE HANDLE\n");
 								done = handle_conn_bin(eventData);
@@ -680,25 +612,15 @@ void * thread_f(void * arg){
                                 printf ("Closed connection on descriptor %d\n",
                                         (((SocketData*)events[i].data.ptr)->fd));
                                 close (((SocketData*)events[i].data.ptr)->fd);
-								// if(events[i].data.ptr){
-								// 	printf("BEFORE FREE\n");
-								// 	free(events[i].data.ptr);
-								// 	events[i].data.ptr = NULL;
-								// }
+								if(events[i].data.ptr){
+									printf("BEFORE FREE\n");
+									free(events[i].data.ptr);
+									events[i].data.ptr = NULL;
+								}
                             }else{
 								event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
 								event.data.ptr = eventData;
-								// ((SocketData*)event.data.ptr)->fd = ((SocketData*)events[i].data.ptr)->fd;
-								// ((SocketData*)event.data.ptr)->bin = ((SocketData*)events[i].data.ptr)->bin;
-								// ((SocketData*)event.data.ptr)->buf = ((SocketData*)events[i].data.ptr)->buf;
-								// ((SocketData*)event.data.ptr)->index = ((SocketData*)events[i].data.ptr)->index;
-								// ((SocketData*)event.data.ptr)->size = ((SocketData*)events[i].data.ptr)->size;
-								// ((SocketData*)event.data.ptr)->a_len = ((SocketData*)events[i].data.ptr)->a_len;
-								// fd socket que escucha
 								epoll_ctl(epfd, EPOLL_CTL_MOD, eventData->fd, &event);
-								// epoll_ctl(epfd, EPOLL_CTL_MOD, (((SocketData*)event.data.ptr)->fd), &event);
-								// fd socket del cliente
-								
 							}
 						}
                 }
