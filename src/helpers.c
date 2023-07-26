@@ -12,60 +12,34 @@
 #include "../headers/io.h"
 #include "../headers/hashing.h"
 
-char * parse_word(char * word){
-    char * parsedWord = malloc(sizeof(char) * strlen(word) + 2);
-    int counter = 0; 
-    for(int i = 0; i < strlen(word); i++){
-        if(isalpha(word[i])){
-            parsedWord[counter++] = tolower(word[i]);
-        }
-    }
-    parsedWord[counter] = '\0';
-    return parsedWord;
-}
-
-void free_accepted(Word ** acceptedWords){   
-    for(int i = 0; i < 6; i++){
-        if(acceptedWords[i] != NULL){
-            free(acceptedWords[i]->word.string);
-            free(acceptedWords[i]);
-        }
-    }
-    free(acceptedWords);
-}
-
-void free_all(char * dictionary[], Word ** hashTable, int tableSize, int dicSize){   
-    for(int i = 0; i < dicSize; i++){
-        free(dictionary[i]);
-    }
-    free(dictionary);
-
+void free_all(Word ** hashTable){   
     for(int i = 0; i < tableSize; i++){
         free_list(hashTable[i]);
     }
+    pthread_mutex_destroy(&putsLock);
+    pthread_mutex_destroy(&delsLock);
+    pthread_mutex_destroy(&getsLock);
+    pthread_mutex_destroy(&kvLock);
+    pthread_mutex_destroy(&firstElemLock);
+    pthread_mutex_destroy(&lastElemLock);
+    for(int i = 0; i < lockSize; i++){
+        pthread_mutex_destroy(&locks[i]);
+    }
     free(hashTable);
+    free(locks);
+
 }
 
 void free_list(Word * word){
     if(word == NULL)
         return;
     if(word->word.string != NULL) free(word->word.string);
+    if(word->value.string != NULL) free(word->value.string);
     Word * next = word->next;
     free(word);
     free_list(next);
 }
 
-char *** check_len(char ** array[], int counter, int * arraySize){
-    int newSize = *arraySize;
-    char ** arrayN = *array;
-    if(*arraySize <= counter){
-        newSize = (newSize * 3);
-        arrayN = realloc(arrayN, sizeof(char *) * (newSize));
-    }
-    *array = arrayN;
-    *arraySize = newSize;
-    return array;
-}
 
 // void save_word(char * word, char * dictionary[], int index){
 //     dictionary[index] = malloc(sizeof(char) * (strlen(word) + 1));
@@ -129,19 +103,11 @@ void clean_array(Word ** hashTable, int counter){
 
 
 void init(){
-      // ver tamaño de hashTable, asignar memoria dependiendo de la memoria disponible
-    // https://stackoverflow.com/questions/14386856/c-check-currently-available-free-ram
-    //TEMP FIX:
-    printf(
-        "sysconf(_SC_AVPHYS_PAGES) * sysconf(_SC_PAGESIZE) = 0x%lX\n",
-        sysconf(_SC_AVPHYS_PAGES) * sysconf(_SC_PAGESIZE)
-    );
     long long free_ram = sysconf(_SC_AVPHYS_PAGES) * sysconf(_SC_PAGESIZE);
     if(free_ram > 80000){
         free_ram = 80000;
     }
     tableSize = free_ram / (sizeof(Word *) / 4);
-    printf("tableSize %d %ld\n", tableSize, (sizeof(Word *) / 4));
     PUTS = 0;
     GETS = 0;
     DELS = 0;

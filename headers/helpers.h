@@ -53,19 +53,13 @@ Word * insert_word(Word * word, unsigned int hash, char * wordChar, char * value
 
 // save_word: (char ***, int, int) -> (char***)
 // Dado el puntero de un array de punteros y un contador, si el contador es mayor al tamaño del array, se triplica el tamaño de este y devuelve el puntero modificado
-char *** check_len(char ** array[], int counter, int * arraySize);
-
 // free_list: (Word *) -> ()
 // Libera la lista enlazada de un Word
 void free_list(Word * word);
 
 // free_all: (char **, Word **, int, int) -> ()
 // Libera el diccionario y la tabla hash
-void free_all(char * dictionary[], Word ** hashTable, int tableSize, int dicSize);
-
-// free_accepted: (Word **) -> ()
-// Libera la lista de palabras aceptadas
-void free_accepted(Word ** acceptedWords);
+void free_all(Word ** hashTable);
 
 void init();
 
