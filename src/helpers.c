@@ -81,26 +81,31 @@ Word * insert_word(Word * word, unsigned int hash, char * wordChar, char * value
     }
     newWord->next = NULL;
     newWord->hash = hash;
-    newWord->word.string = malloc(sizeof(char)*lengthWord);
-    memcpy(newWord->word.string, wordChar, lengthWord);
+    // newWord->word.string = malloc(sizeof(char)*lengthWord);
+    // memcpy(newWord->word.string, wordChar, lengthWord);
+    newWord->word.string = wordChar;
     newWord->word.len = lengthWord;
-    newWord->value.string = malloc(sizeof(char)*lengthValue);
-    memcpy(newWord->value.string, value, lengthValue);
+    // newWord->value.string = malloc(sizeof(char)*lengthValue);
+    // memcpy(newWord->value.string, value, lengthValue);
+    newWord->value.string = value;
     newWord->value.len = lengthValue;
     newWord->bin = mode;
+    pthread_mutex_lock(&firstElemLock);
     if(firstElemDelete){
         firstElemDelete->prev_delete = newWord;
     }
-
     newWord->next_delete = firstElemDelete;
+    firstElemDelete = newWord;
+    pthread_mutex_unlock(&firstElemLock);
 
     newWord->prev_delete = NULL;
-    firstElemDelete = newWord;
+    
 
+    pthread_mutex_lock(&lastElemLock);
     if(lastElemDelete == NULL){
         lastElemDelete = newWord;
     }
-
+    pthread_mutex_unlock(&lastElemLock);
 
     if(word == NULL){
         word = newWord;
@@ -182,38 +187,48 @@ void init(){
 }
 
 
-void parser(char* str, char tok[3][1000]){
+char ** parser(char* str){
     // const char s[2] = " ";
-    
+    char ** tP = malloc(sizeof(char*)*4);
     char *token; 
     token = strtok(str, " ");
-    strcpy(tok[0], token);
+    tP[0] = malloc(sizeof(char) * strlen(token)); 
+    strcpy(tP[0], token);
+    // strcpy(tok[0], token);
     int i = 1;
     token = strtok(NULL, " ");
     while(token != NULL){
-        strcpy(tok[i++], token);
+        tP[i] = malloc(sizeof(char) * strlen(token)); 
+        strcpy(tP[i++], token);
+        // strcpy(tok[i++], token);
         token = strtok(NULL, " ");
     }
     printf("%d\n", i);
-    return;
+    return tP;
 }
 
 
 pthread_mutex_t* get_lock(int position){
     int pos = (position % lockSize);
     printf("position: %d %d\n", position, pos);
-    return &locks[pos];
+    pthread_mutex_t * lock = &locks[pos];
+    printf("AFTER GET LOCK\n");
+    return lock;
 }
 
 
 void delete_element(Word * prev, Word * actual){
+    pthread_mutex_lock(&lastElemLock);
     if(actual == lastElemDelete){
         lastElemDelete = actual->prev_delete;
         
     }
+    pthread_mutex_unlock(&lastElemLock);
+    pthread_mutex_lock(&firstElemLock);
     if(actual == firstElemDelete){
         firstElemDelete = actual->next_delete;
     }
+    pthread_mutex_unlock(&firstElemLock);
     prev->next = actual->next;
     free(actual->word.string);
     free(actual->value.string);
@@ -236,6 +251,7 @@ int compare_string(CompString s1, CompString s2){
 }
 
 void freeMemory(){
+    pthread_mutex_lock(&lastElemLock);
     if(lastElemDelete){
         Word * aux = lastElemDelete->prev_delete;
         free(lastElemDelete->word.string);
@@ -245,5 +261,6 @@ void freeMemory(){
     }else{
         // nos quedamos sin memoria, quit?
     }
+    pthread_mutex_unlock(&lastElemLock);
     return;
 }

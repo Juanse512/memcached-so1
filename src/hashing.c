@@ -60,7 +60,7 @@ Word * find_word(char * word, int len){
     unsigned int position = first_hash % tableSize;
     int flag = 1;
     pthread_mutex_t* lock = get_lock(position);
-    printf("%p\n", lock);
+    printf("after get lock%p\n", lock);
     pthread_mutex_lock(lock);
     Word * aux = hashTable[position];
     Word * returnValue = NULL;
@@ -79,19 +79,21 @@ Word * find_word(char * word, int len){
                             lastElemDelete = returnValue->prev_delete;
                         }
                         pthread_mutex_unlock(&lastElemLock);
-
                         pthread_mutex_t* prev_lock = get_lock(returnValue->prev_delete->hash % tableSize);
-                        pthread_mutex_t* next_lock = get_lock(returnValue->next_delete->hash % tableSize);
+                        pthread_mutex_t* next_lock = NULL;
+                        if(returnValue->next_delete){
+                             next_lock = get_lock(returnValue->next_delete->hash % tableSize);
+                        }
                         // PUEDE ENTRAR EN DEADLOCK? CREO QUE NO
                         if(prev_lock != next_lock){
                             if(prev_lock != lock){
                                 pthread_mutex_lock(prev_lock);
                             }
-                            if(next_lock != lock){
+                            if(next_lock != lock && next_lock != NULL){
                                 pthread_mutex_lock(next_lock);
                             }
                                 returnValue->prev_delete->next_delete = returnValue->next_delete;
-                            if(next_lock != lock){
+                            if(next_lock != lock && next_lock != NULL){
                                 pthread_mutex_unlock(next_lock);
                             }
                             if(prev_lock != lock){
@@ -138,10 +140,12 @@ int hash_word(char * key, char * value,int counter, int keyLength, int valueLeng
     }else{
         printf("FOUND MATCH %s\n", value);
         free(foundPos->value.string);
-        foundPos->value.string = malloc(sizeof(char)*valueLength);
-        memcpy(foundPos->value.string, value, valueLength);
+        // foundPos->value.string = malloc(sizeof(char)*valueLength);
+        // memcpy(foundPos->value.string, value, valueLength);
+        foundPos->value.string = value;
         foundPos->value.len = valueLength;
         foundPos->bin = mode;
+        free(key);
         ret = 1;
     }
     

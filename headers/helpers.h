@@ -69,7 +69,7 @@ void free_accepted(Word ** acceptedWords);
 
 void init();
 
-void parser(char* str, char tok[3][1000]);
+char ** parser(char* str);
 
 pthread_mutex_t* get_lock(int position);
 

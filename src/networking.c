@@ -210,6 +210,11 @@ void input_handler_bin(int csock, int mode, char* key, char* val, int keyLen, in
 		comm = EINVAL;
 		write(csock, &comm, 1);
 	}
+	if(mode != PUT){
+		if(key){
+			free(key);
+		}
+	}
 	printf("AFTER HANDLER\n");
 	// sprintf(reply, "%d\n", U);
 	// write(csock, reply, strlen(reply));
@@ -349,22 +354,18 @@ int parse_text_bin(int fd, char * buf, int buf_size, int index){
 	// llamar a handle 
 	input_handler_bin(fd, mode, key, value, size, vSize);
 	printf("BEFORE FREE\n");
-	if(key){
-		free(key);
-	}
-	if(value){
-		free(value);
-	}
 	return parse_text_bin(fd, buf, buf_size, index);
 }
 
 
-void input_handler(int csock, char tok[3][1000]){
+void input_handler(int csock, char ** tok){
 	char reply[MAX_RESPONSE];
 	int ok = 0;
+	printf("INSTRUCTION: %s\n", tok[0]);
 	if(strcmp(tok[0], "GET") == 0){
 		printf("KEY %s\n", tok[1]);
 		Word * result = find_word(tok[1], strlen(tok[1]));
+		printf("after find\n");
 		if(result == NULL){
 			sprintf(reply, "ENOTFOUND\n");
 		}else{
@@ -385,7 +386,13 @@ void input_handler(int csock, char tok[3][1000]){
 	}
 	if(strcmp(tok[0], "PUT") == 0){
 		printf("KEY %s\n", tok[1]);
-		int res = hash_word(tok[1], tok[2], tableSize, strlen(tok[1]), strlen(tok[2]), 0);
+		int len = strlen(tok[1]);
+		int lenV = strlen(tok[2]);
+		char * key = malloc(sizeof(char) * len);
+		char * value = malloc(sizeof(char) * lenV);
+		memcpy(key, tok[1], len);
+		memcpy(value, tok[2], lenV);
+		int res = hash_word(key, value, tableSize, strlen(tok[1]), strlen(tok[2]), 0);
 		sprintf(reply, "OK\n");
 		pthread_mutex_lock(&putsLock);
 		PUTS++;
@@ -457,8 +464,9 @@ int handle_conn(SocketData * event)
 			// EBIG
 			return 2;
 		}
-		parser(event->buf, tok);
-		input_handler(event->fd, tok);
+		char ** tokP = parser(event->buf);
+		// parser(event->buf, tok);
+		input_handler(event->fd, tokP);
 		if(res_text == 1){
 			printf("BEFORE FREE RES\n");
 			if(event->buf)
