@@ -30,7 +30,7 @@ typedef struct WordStruct{
 
 int tableSize;
 int lockSize;
-int binlsock;
+int binlsock, lsock;
 int PUTS, DELS, GETS, KEYVALUES;
 pthread_mutex_t putsLock, delsLock, getsLock, kvLock, firstElemLock, lastElemLock;
 Word * lastElemDelete;

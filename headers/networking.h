@@ -9,7 +9,7 @@ static int make_socket_non_blocking (int sfd);
 
 void * thread_f(void * arg);
 
-void wait_for_clients(int lsock);
+void wait_for_clients();
 
 int mk_lsock(int port);
 

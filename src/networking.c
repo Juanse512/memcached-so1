@@ -517,7 +517,7 @@ int handle_conn_bin(SocketData * event)
 
 
 void * thread_f(void * arg){
-    int lsock = arg - (void*)0;
+    // int lsock = arg - (void*)0;
     int nfds; //lleva la cantidad de fds listos para E/S
 	int efd, s;
     struct epoll_event events[10]; // ver max events
@@ -632,13 +632,13 @@ void * thread_f(void * arg){
 }
 
 
-void wait_for_clients(int lsock)
+void wait_for_clients()
 {
 	// int csock;
     int number_of_processors = sysconf(_SC_NPROCESSORS_ONLN);
     pthread_t clientes[number_of_processors+1];
     for (int i = 0; i < number_of_processors; i++){
-		pthread_create(&clientes[i], NULL, thread_f, lsock + (void*)0);
+		pthread_create(&clientes[i], NULL, thread_f, NULL);
     }
     for (int i = 0; i < number_of_processors; i++){
         pthread_join(clientes[i], NULL);
@@ -652,17 +652,17 @@ void wait_for_clients(int lsock)
 int mk_lsock(int port)
 {
 	struct sockaddr_in sa;
-	int lsock;
+	int sock;
 	int rc;
 	int yes = 1;
 
 	/* Crear socket */
-	lsock = socket(AF_INET, SOCK_STREAM, 0);
-	if (lsock < 0)
+	sock = socket(AF_INET, SOCK_STREAM, 0);
+	if (sock < 0)
 		quit("socket");
 
 	/* Setear opción reuseaddr... normalmente no es necesario */
-	if (setsockopt(lsock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) == 1)
+	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) == 1)
 		quit("setsockopt");
 
 	sa.sin_family = AF_INET;
@@ -670,23 +670,23 @@ int mk_lsock(int port)
 	sa.sin_addr.s_addr = htonl(INADDR_ANY);
 
 	/* Bindear al puerto 4040 TCP, en todas las direcciones disponibles */
-	rc = bind(lsock, (struct sockaddr *)&sa, sizeof sa);
+	rc = bind(sock, (struct sockaddr *)&sa, sizeof sa);
 	if (rc < 0)
 		quit("bind");
 
 	/* Setear en modo escucha */
-	rc = listen(lsock, 10);
+	rc = listen(sock, 10);
   
-  /* creo instancia epoll y registro el lsock */
+  /* creo instancia epoll y registro el sock */
   if(epfd == 0){
   	epfd = epoll_create(1); 
   }
-  epoll_ctl_add(epfd, lsock, EPOLLIN | EPOLLOUT | EPOLLET);
+  epoll_ctl_add(epfd, sock, EPOLLIN | EPOLLOUT | EPOLLET);
 	
   if (rc < 0)
 		quit("listen");
 
-	return lsock;
+	return sock;
 }
 
 // int main()

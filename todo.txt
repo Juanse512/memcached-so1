@@ -1,5 +1,4 @@
 - frees
-- permisos
 - cambiar sistema de locks en cola de prioridad, array paralelo de locks exclusivo para cola de prioridad, solo lockear este y no
 toda la region de la tabla hash
 - comentar

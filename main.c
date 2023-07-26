@@ -30,7 +30,6 @@ int main(int argc, char *argv[])
     // Word * res = find_word(key, 100);
 
     // printf("word: %s %s %s\n", res->value, firstElemDelete->value, firstElemDelete->next_delete->value);
-    int lsock;
     if (setuid(0) != 0) {
         perror("setuid");
         return 1;
@@ -43,6 +42,6 @@ int main(int argc, char *argv[])
     }
     printf("UID: %d\n", getuid());
     printf("UID: %d\n", geteuid());
-	wait_for_clients(lsock);
+	wait_for_clients();
     return 0;
 }
