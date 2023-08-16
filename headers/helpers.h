@@ -25,6 +25,7 @@ typedef struct WordStruct{
   struct WordStruct* next_delete;
   struct WordStruct* prev_delete;
   struct WordStruct* next;
+  struct WordStruct* prev;
 } Word;
 
 
@@ -45,7 +46,7 @@ void clean_array(Word ** hashTable, int counter);
 
 //insert_word: (int, Word *,unsigned int, char *) -> (Word*)
 // Toma una palabra o el indice de una y la coloca al final de la Word que le pasamos, devuelve la Word actualizada
-Word * insert_word(Word * word, unsigned int hash, char * wordChar, char * value, int lengthWord, int lengthValue, int mode);
+Word * insert_word(Word * word, Word * newWord);
 
 //save_word: (char *, char **, int) -> ()
 // Guarda una palabra en el array que le pasamos, en la posicion dada
@@ -65,7 +66,7 @@ void init();
 
 char ** parser(char* str);
 
-pthread_mutex_t* get_lock(int position);
+pthread_mutex_t* get_lock(unsigned int position);
 
 void delete_element(Word * prev, Word * actual);
 

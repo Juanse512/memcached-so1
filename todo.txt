@@ -3,3 +3,4 @@
 toda la region de la tabla hash
 - comentar
 - informe
+- arreglar bug freeMemory - revisar que no tome el mismo lock 2 veces

@@ -1,5 +1,5 @@
 -module(cliente).
--export([start/2, get/2, del/2, stats/1, put/3]).
+-export([start/2, get/2, del/2, stats/1, put/3, test/1]).
 
 generate_bin(3) -> <<0,0,0>>;
 generate_bin(2) -> <<0,0>>;
@@ -86,3 +86,11 @@ put(Sock,Key,Value) ->
                                 [Head | Tail] = List,
                                 compare_response(Head)
     end.
+
+
+test(N) -> 
+    Sock = start("localhost", 889),
+    testAux(Sock, N).
+testAux(Sock, 0) -> ok;
+testAux(Sock, N) -> put(Sock, integer_to_list(N), integer_to_list(N)),
+                    testAux(Sock, N-1).

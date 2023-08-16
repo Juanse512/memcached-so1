@@ -124,10 +124,10 @@ void input_handler_bin(int csock, int mode, char* key, char* val, int keyLen, in
 	char reply[MAX_RESPONSE];
 	int ok = 0;
 	char comm;
-	printf("MODE HANDLER: %d\n", mode);
+	
+
 	if(mode == 11){
 		// guardar en buf
-		printf("VALUE HASH WORD %s %d\n", val, valLen);
 		int res = hash_word(key, val, tableSize, keyLen, valLen, 1);
 		comm = OK;
 		write(csock, &comm, 1);
@@ -166,7 +166,6 @@ void input_handler_bin(int csock, int mode, char* key, char* val, int keyLen, in
 			comm = ENOTFOUND;
 			write(csock, &comm, 1);
 		}else{
-			printf("FOUND\n");
 			comm = OK;
 			int len = result->value.len;
 			int len_net = htonl(len);
@@ -215,7 +214,7 @@ void input_handler_bin(int csock, int mode, char* key, char* val, int keyLen, in
 			free(key);
 		}
 	}
-	printf("AFTER HANDLER\n");
+
 	// sprintf(reply, "%d\n", U);
 	// write(csock, reply, strlen(reply));
 	return;
@@ -249,7 +248,6 @@ int text_consume(int fd, char ** buf_p, int * index, int * size, int * a_size){
 	*size = i;
 	*buf_p = buf;
 	
-	printf("AFTER TEXT CONSUME %s\n", buf);
 	return valid;
 }
 int text_consume_bin(int fd, char ** buf_p, int * index, int * size, int * a_size){
@@ -259,6 +257,7 @@ int text_consume_bin(int fd, char ** buf_p, int * index, int * size, int * a_siz
 		buf = malloc(sizeof(char) * (*a_size));
 		while(buf == NULL){
 			freeMemory();
+			printf("FREE MEMORY TEXT CONSUME BIN\n");
 			buf = malloc(sizeof(char) * (*a_size));
 		}
 	}else{
@@ -268,7 +267,6 @@ int text_consume_bin(int fd, char ** buf_p, int * index, int * size, int * a_siz
 	int i = *size;
 	while ((rc = read(fd, buf + i, 1)) > 0) {
 		// rc = read(fd, buf + i, 1);
-		printf("rc %d %d %d\n", rc, buf[i], i);
 		i++;
 		
 		if(i >= *a_size){
@@ -283,12 +281,10 @@ int text_consume_bin(int fd, char ** buf_p, int * index, int * size, int * a_siz
 	}
 	*size = i;
 	*buf_p = buf;
-	printf("AFTER TEXT CONSUME\n");
 	return 1;
 }
 
 int parse_text_bin(int fd, char * buf, int buf_size, int index){
-	printf("parse txt bin %d %d\n", buf_size, index);
 	// MODO STATS
 	if(index >= buf_size){
 		return 0;
@@ -308,19 +304,18 @@ int parse_text_bin(int fd, char * buf, int buf_size, int index){
 	int size = ((int)buf[index+1] * pow(256,3)) + ((int)buf[index+2] * pow(256,2)) + ((int)buf[index+3] * pow(256,1)) + ((int)buf[index+4]);
 	int vSize = 0;
 	if((buf_size-5-index) < size){
-		printf("%d %d %d\n", buf_size, index, size);
 
 		return -1;
 	}
 
 	if(mode == PUT && (size + 9) > buf_size){
-			printf("FALTA VALUE\n");
 			return -1;
 	}
 
 	key = malloc(sizeof(char)*(size+1));
 	while(key == NULL){
 		freeMemory();
+		printf("FREE MEMORY PARSE TEXT BIN\n");
 		key = malloc(sizeof(char)*(size+1));
 	}
 	int k = 0;
@@ -334,7 +329,6 @@ int parse_text_bin(int fd, char * buf, int buf_size, int index){
 	index = (size + index + 5);
 	if(mode == PUT){
 		vSize = ((int)buf[index] * pow(256,3)) + ((int)buf[index+1] * pow(256,2)) + ((int)buf[index+2] * pow(256,1)) + ((int)buf[index+3]);
-		printf("HERE %d %d %d %d\n", (int)buf[index+1], (int)buf[index+2], ((int)buf[index+3]), (int)buf[index+4]);
 		if((buf_size-4-index) < vSize){
 
 			return -1;
@@ -342,6 +336,7 @@ int parse_text_bin(int fd, char * buf, int buf_size, int index){
 
 		value = malloc(sizeof(char)*(vSize+1));
 		while(value == NULL){
+			printf("FREE MEMORY PARSE TEXT BIN VALUE\n");
 			freeMemory();
 			value = malloc(sizeof(char)*(vSize+1));
 		}
@@ -353,7 +348,6 @@ int parse_text_bin(int fd, char * buf, int buf_size, int index){
 	}
 	// llamar a handle 
 	input_handler_bin(fd, mode, key, value, size, vSize);
-	printf("BEFORE FREE\n");
 	return parse_text_bin(fd, buf, buf_size, index);
 }
 
@@ -361,11 +355,8 @@ int parse_text_bin(int fd, char * buf, int buf_size, int index){
 void input_handler(int csock, char ** tok){
 	char reply[MAX_RESPONSE];
 	int ok = 0;
-	printf("INSTRUCTION: %s\n", tok[0]);
 	if(strcmp(tok[0], "GET") == 0){
-		printf("KEY %s\n", tok[1]);
 		Word * result = find_word(tok[1], strlen(tok[1]));
-		printf("after find\n");
 		if(result == NULL){
 			sprintf(reply, "ENOTFOUND\n");
 		}else{
@@ -385,7 +376,6 @@ void input_handler(int csock, char ** tok){
 		ok = 1;
 	}
 	if(strcmp(tok[0], "PUT") == 0){
-		printf("KEY %s\n", tok[1]);
 		int len = strlen(tok[1]);
 		int lenV = strlen(tok[2]);
 		char * key = malloc(sizeof(char) * len);
@@ -453,7 +443,6 @@ int handle_conn(SocketData * event)
 		// rc = fd_readline(csock, buf);
 		res_text = text_consume(event->fd, &(event->buf), &(event->index), &(event->size), &(event->a_len));
 		if(res_text == 0){
-			printf("CLOSE CSOCK\n");
 			close(event->fd);
 			return 1;
 		}
@@ -468,7 +457,6 @@ int handle_conn(SocketData * event)
 		// parser(event->buf, tok);
 		input_handler(event->fd, tokP);
 		if(res_text == 1){
-			printf("BEFORE FREE RES\n");
 			if(event->buf)
 				free(event->buf);
 			
@@ -488,20 +476,15 @@ int handle_conn_bin(SocketData * event)
 	// char buf[MAX_RESPONSE];
 	int res, res_text;
 	while (1) {
-		printf("HANDLE CON BINN NEW\n");
 
-		printf("EVENT: %d SIZE: %d\n", event->fd, event->size);
 
 		res_text = text_consume_bin(event->fd, &(event->buf), &(event->index), &(event->size), &(event->a_len));
 		if(res_text == 0){
-			printf("CLOSE CSOCK\n");
 			close(event->fd);
 			return 1;
 		}
 		res = parse_text_bin(event->fd, (event->buf), event->size, event->index);
-		printf("RES %d\n", res);
 		if(res == 0){
-			printf("BEFORE FREE RES\n");
 			if(event->buf)
 				free(event->buf);
 			
@@ -525,7 +508,6 @@ void * thread_f(void * arg){
     while(1){
         nfds = epoll_wait(epfd, events, 10, -1);  //chequear error
         for (int i = 0; i < nfds; i++) {
-			printf("HERE\n");
 			SocketData *eventData = ((SocketData *)events[i].data.ptr);
 			if (lsock == (eventData->fd))
 			{ 
@@ -551,7 +533,6 @@ void * thread_f(void * arg){
 						ctx->size = 0; 
 						ctx->a_len = 2049; 
 						event.data.ptr = ctx;
-                        printf("set events %u, infd=%d\n", event.events, infd);
                         s = epoll_ctl (epfd, EPOLL_CTL_ADD, infd, &event);
                         if (s == -1)
                         {
@@ -566,7 +547,6 @@ void * thread_f(void * arg){
 						if (binlsock == (eventData->fd)){
 							int infd;
 							//in_len = sizeof in_addr;
-							printf("BINARY MODE\n");
 
 							infd = accept (binlsock, NULL, NULL);
 							s = make_socket_non_blocking (infd);
@@ -584,7 +564,6 @@ void * thread_f(void * arg){
 							ctx->size = 0; 
 							ctx->a_len = 2049; 
 							event.data.ptr = ctx;
-							printf("set events %u, infd=%d\n", event.events, infd);
 							s = epoll_ctl (epfd, EPOLL_CTL_ADD, infd, &event);
 							// epoll_ctl(epfd, EPOLL_CTL_MOD, binlsock, &event);
 							if (s == -1)
@@ -598,12 +577,10 @@ void * thread_f(void * arg){
 						}else{
                             int done = 0;
 
-							printf("type: %d\n", (eventData->bin));
 							// int type = *((int*)events[i].data.ptr);
 							if((eventData->bin) == 0){
                             	done = handle_conn(eventData);
 							}else{
-								printf("BINARY MODE HANDLE\n");
 								done = handle_conn_bin(eventData);
 								// done = 2;
 							}
@@ -615,7 +592,6 @@ void * thread_f(void * arg){
                                         (((SocketData*)events[i].data.ptr)->fd));
                                 close (((SocketData*)events[i].data.ptr)->fd);
 								if(events[i].data.ptr){
-									printf("BEFORE FREE\n");
 									free(events[i].data.ptr);
 									events[i].data.ptr = NULL;
 								}
