@@ -60,8 +60,7 @@ static void epoll_ctl_add(int epfd, int fd, uint32_t events)
 {
 	struct epoll_event ev;
 	ev.events = events;
-	// ev.data.fd = fd;
-	ev.data.ptr = malloc(sizeof(SocketData));
+	ev.data.ptr = robust_malloc(sizeof(SocketData));
 	((SocketData*)ev.data.ptr)->fd = fd;
 	((SocketData*)ev.data.ptr)->buf = NULL;
 	((SocketData*)ev.data.ptr)->index = 0; 
@@ -100,23 +99,6 @@ static int make_socket_non_blocking (int sfd)
 
 int U = 0;
 
-
-
-/*
- * Para probar, usar netcat. Ej:
- *
- *      $ nc localhost 4040
- *      NUEVO
- *      0
- *      NUEVO
- *      1
- *      CHAU
- */
-
-// void quit(){
-//     exit(0);
-// }
-
 int read_byte(int fd, char* byte){
 	return READ(fd, byte, 1);
 }
@@ -126,12 +108,10 @@ void input_handler_bin(int csock, int mode, char* key, char* val, int keyLen, in
 	char comm;
 	
 
-	if(mode == 11){
-		// guardar en buf
+	if(mode == PUT){
 		int res = hash_word(key, val, tableSize, keyLen, valLen, 1);
 		comm = OK;
 		write(csock, &comm, 1);
-		// sprintf(reply, "OK\n");
 		pthread_mutex_lock(&putsLock);
 		PUTS++;
 		pthread_mutex_unlock(&putsLock);
@@ -140,7 +120,7 @@ void input_handler_bin(int csock, int mode, char* key, char* val, int keyLen, in
 		pthread_mutex_unlock(&kvLock);
 		ok = 1;
 	}
-	if(mode == 12){
+	if(mode == DEL){
 		int res = find_elem_to_delete(key, keyLen);
 		if(res){
 			comm = OK;
@@ -158,11 +138,9 @@ void input_handler_bin(int csock, int mode, char* key, char* val, int keyLen, in
 		ok = 1;
 	}
 
-	if(mode == 13){
+	if(mode == GET){
 		Word * result = find_word(key, keyLen);
 		if(result == NULL){
-			// sprintf(reply, "ENOTFOUND\n");
-			// sprintf(reply, "%d", 112);
 			comm = ENOTFOUND;
 			write(csock, &comm, 1);
 		}else{
@@ -172,18 +150,13 @@ void input_handler_bin(int csock, int mode, char* key, char* val, int keyLen, in
 			write(csock, &comm, 1);
 			write(csock, &len_net, 4);
 			write(csock, result->value.string, len);
-			// if(strlen(result->value) + 4 > 2048){
-			// 	sprintf(reply, "EBIG\n");
-			// }
-
-			// sprintf(reply, "OK %s\n", result->value);
 		}
 		pthread_mutex_lock(&getsLock);
 		GETS++;
 		pthread_mutex_unlock(&getsLock);
 		ok = 1;
 	}
-	if(mode == 21){
+	if(mode == STATS){
 
 		pthread_mutex_lock(&putsLock);
 		int puts = PUTS;
@@ -197,7 +170,6 @@ void input_handler_bin(int csock, int mode, char* key, char* val, int keyLen, in
 		sprintf(reply, "PUTS:%d GETS: %d KEYVALUES: %d", puts, gets, kv);
 		comm = OK;
 		int len = strlen(reply);
-		// reply[]
 		int len_net = htonl(len);
 		write(csock, &comm, 1);
 		write(csock, &len_net, 4);
@@ -214,9 +186,6 @@ void input_handler_bin(int csock, int mode, char* key, char* val, int keyLen, in
 			free(key);
 		}
 	}
-
-	// sprintf(reply, "%d\n", U);
-	// write(csock, reply, strlen(reply));
 	return;
 }
 int text_consume(int fd, char ** buf_p, int * index, int * size, int * a_size){
@@ -224,7 +193,7 @@ int text_consume(int fd, char ** buf_p, int * index, int * size, int * a_size){
 	int valid = -1;
 	if(*buf_p == NULL || size == 0){
 		*a_size = 2049;
-		buf = malloc(sizeof(char) * (*a_size));
+		buf = robust_malloc(sizeof(char) * (*a_size));
 	}else{
 		buf = *buf_p;
 	}
@@ -254,26 +223,20 @@ int text_consume_bin(int fd, char ** buf_p, int * index, int * size, int * a_siz
 	char * buf;
 	if(*buf_p == NULL || size == 0){
 		*a_size = 2049;
-		buf = malloc(sizeof(char) * (*a_size));
-		while(buf == NULL){
-			freeMemory();
-			printf("FREE MEMORY TEXT CONSUME BIN\n");
-			buf = malloc(sizeof(char) * (*a_size));
-		}
+		buf = robust_malloc(sizeof(char) * (*a_size));
 	}else{
 		buf = *buf_p;
 	}
-	int rc; // = 1;
+	int rc;
 	int i = *size;
 	while ((rc = read(fd, buf + i, 1)) > 0) {
-		// rc = read(fd, buf + i, 1);
 		i++;
-		
 		if(i >= *a_size){
 			*a_size = (*a_size) * 2;
 			*buf_p = realloc(*buf_p, (*a_size));
 			buf = *buf_p;
-			// eliminar si no hay memoria?
+			if(buf == NULL)
+				break;
 		}
 	}
 	if(i == *size){
@@ -285,17 +248,16 @@ int text_consume_bin(int fd, char ** buf_p, int * index, int * size, int * a_siz
 }
 
 int parse_text_bin(int fd, char * buf, int buf_size, int index){
-	// MODO STATS
-	if(index >= buf_size){
+	if(index >= buf_size)
 		return 0;
-	}
+	
 	if(buf_size == 1 && buf[0] == STATS){
 		input_handler_bin(fd, STATS, NULL, NULL, 0, 0);
 		return parse_text_bin(fd, buf, buf_size, index + 1);
 	}
-	if(buf_size < 5){
+	if(buf_size < 5)
 		return -1;
-	}
+	
 	
 	int mode = buf[index];
 	char * key = NULL;
@@ -303,21 +265,15 @@ int parse_text_bin(int fd, char * buf, int buf_size, int index){
 
 	int size = ((int)buf[index+1] * pow(256,3)) + ((int)buf[index+2] * pow(256,2)) + ((int)buf[index+3] * pow(256,1)) + ((int)buf[index+4]);
 	int vSize = 0;
-	if((buf_size-5-index) < size){
-
+	if((buf_size-5-index) < size)
 		return -1;
-	}
+	
 
-	if(mode == PUT && (size + 9) > buf_size){
-			return -1;
-	}
+	if(mode == PUT && (size + 9) > buf_size)
+		return -1;
 
-	key = malloc(sizeof(char)*(size+1));
-	while(key == NULL){
-		freeMemory();
-		printf("FREE MEMORY PARSE TEXT BIN\n");
-		key = malloc(sizeof(char)*(size+1));
-	}
+
+	key = robust_malloc(sizeof(char)*(size+1));
 	int k = 0;
 	// liberar memoria de nuevo?
 
@@ -325,28 +281,20 @@ int parse_text_bin(int fd, char * buf, int buf_size, int index){
 		key[k++] = buf[i];
 	}
 	key[k] = '\0';
-	printf("key: %s mode: %d\n", key, buf[0]);
 	index = (size + index + 5);
 	if(mode == PUT){
 		vSize = ((int)buf[index] * pow(256,3)) + ((int)buf[index+1] * pow(256,2)) + ((int)buf[index+2] * pow(256,1)) + ((int)buf[index+3]);
-		if((buf_size-4-index) < vSize){
-
+		if((buf_size-4-index) < vSize)
 			return -1;
-		}
+		
 
-		value = malloc(sizeof(char)*(vSize+1));
-		while(value == NULL){
-			printf("FREE MEMORY PARSE TEXT BIN VALUE\n");
-			freeMemory();
-			value = malloc(sizeof(char)*(vSize+1));
-		}
+		value = robust_malloc(sizeof(char)*(vSize+1));
 		k = 0;
-		for(int i = (index + 4); i < (vSize+index+4); i++){
+		for(int i = (index + 4); i < (vSize+index+4); i++)
 			value[k++] = buf[i];
-		}
+		
 		index = (vSize + index + 4);
 	}
-	// llamar a handle 
 	input_handler_bin(fd, mode, key, value, size, vSize);
 	return parse_text_bin(fd, buf, buf_size, index);
 }
@@ -378,8 +326,8 @@ void input_handler(int csock, char ** tok){
 	if(strcmp(tok[0], "PUT") == 0){
 		int len = strlen(tok[1]);
 		int lenV = strlen(tok[2]);
-		char * key = malloc(sizeof(char) * len);
-		char * value = malloc(sizeof(char) * lenV);
+		char * key = robust_malloc(sizeof(char) * len);
+		char * value = robust_malloc(sizeof(char) * lenV);
 		memcpy(key, tok[1], len);
 		memcpy(value, tok[2], lenV);
 		int res = hash_word(key, value, tableSize, strlen(tok[1]), strlen(tok[2]), 0);
@@ -410,7 +358,6 @@ void input_handler(int csock, char ** tok){
 	}
 
 	if(strcmp(tok[0], "STATS") == 0){
-		// deadlock? 
 		pthread_mutex_lock(&putsLock);
 		int puts = PUTS;
 		pthread_mutex_unlock(&putsLock);
@@ -427,7 +374,6 @@ void input_handler(int csock, char ** tok){
 	if(ok == 0){
 		sprintf(reply, "EINVAL\n");
 	}
-	// sprintf(reply, "%d\n", U);
 	write(csock, reply, strlen(reply));
 	return;
 }
@@ -500,8 +446,7 @@ int handle_conn_bin(SocketData * event)
 
 
 void * thread_f(void * arg){
-    // int lsock = arg - (void*)0;
-    int nfds; //lleva la cantidad de fds listos para E/S
+    int nfds;
 	int efd, s;
     struct epoll_event events[10]; // ver max events
 	struct epoll_event event;
@@ -509,98 +454,80 @@ void * thread_f(void * arg){
         nfds = epoll_wait(epfd, events, 10, -1);  //chequear error
         for (int i = 0; i < nfds; i++) {
 			SocketData *eventData = ((SocketData *)events[i].data.ptr);
-			if (lsock == (eventData->fd))
-			{ 
-                
-                    //struct sockaddr in_addr;
-                        //socklen_t in_len;
-                        int infd;
-                        //in_len = sizeof in_addr;
-                        infd = accept (lsock, NULL, NULL);
-                        s = make_socket_non_blocking (infd);
-                        if (s == -1)
-                        abort ();
+			if (lsock == (eventData->fd)){ 
+				int infd;
+				infd = accept (lsock, NULL, NULL);
+				s = make_socket_non_blocking (infd);
+				if (s == -1)
+					abort();
+				event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+				SocketData* ctx = robust_malloc(sizeof(SocketData));
+				ctx->fd = infd;
+				ctx->bin = 0;
+				ctx->buf = NULL;
+				ctx->index = 0; 
+				ctx->size = 0; 
+				ctx->a_len = 2049; 
+				event.data.ptr = ctx;
+				s = epoll_ctl (epfd, EPOLL_CTL_ADD, infd, &event);
+				if (s == -1)
+				{
+					perror ("epoll_ctl");
+					abort ();
+				}
+				event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+				event.data.ptr = eventData;
+				epoll_ctl(efd, EPOLL_CTL_MOD, eventData->fd, &event);
+                }else{
+					if (binlsock == (eventData->fd)){
+						int infd;
 
-						// event.data.u32 = (uint32_t)0;
-                        event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
-                        // event.data.fd = infd;
-						
-						SocketData* ctx = malloc(sizeof(SocketData));
+						infd = accept (binlsock, NULL, NULL);
+						s = make_socket_non_blocking (infd);
+						if (s == -1)
+							abort ();
+						event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+						SocketData* ctx = robust_malloc(sizeof(SocketData));
 						ctx->fd = infd;
-						ctx->bin = 0;
+						ctx->bin = 1;
 						ctx->buf = NULL;
 						ctx->index = 0; 
 						ctx->size = 0; 
 						ctx->a_len = 2049; 
 						event.data.ptr = ctx;
-                        s = epoll_ctl (epfd, EPOLL_CTL_ADD, infd, &event);
-                        if (s == -1)
-                        {
-                            perror ("epoll_ctl");
-                            abort ();
-                        }
+						s = epoll_ctl (epfd, EPOLL_CTL_ADD, infd, &event);
+						if (s == -1)
+						{
+							perror ("epoll_ctl");
+							abort ();
+						}
 						event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
 						event.data.ptr = eventData;
 						epoll_ctl(efd, EPOLL_CTL_MOD, eventData->fd, &event);
-        /*              continue; */
-                }else{
-						if (binlsock == (eventData->fd)){
-							int infd;
-							//in_len = sizeof in_addr;
+					}else{
+						int done = 0;
+						if((eventData->bin) == 0){
+							done = handle_conn(eventData);
+						}else{
+							done = handle_conn_bin(eventData);
+						}
 
-							infd = accept (binlsock, NULL, NULL);
-							s = make_socket_non_blocking (infd);
-							if (s == -1)
-								abort ();
 
-							// event.data.u32 = (uint32_t)1;
-							event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
-							// event.data.fd = infd;
-							SocketData* ctx = malloc(sizeof(SocketData));
-							ctx->fd = infd;
-							ctx->bin = 1;
-							ctx->buf = NULL;
-							ctx->index = 0; 
-							ctx->size = 0; 
-							ctx->a_len = 2049; 
-							event.data.ptr = ctx;
-							s = epoll_ctl (epfd, EPOLL_CTL_ADD, infd, &event);
-							// epoll_ctl(epfd, EPOLL_CTL_MOD, binlsock, &event);
-							if (s == -1)
-							{
-								perror ("epoll_ctl");
-								abort ();
+						if (done == 1)
+						{
+							printf ("Closed connection on descriptor %d\n",
+									(((SocketData*)events[i].data.ptr)->fd));
+							close (((SocketData*)events[i].data.ptr)->fd);
+							if(events[i].data.ptr){
+								free(events[i].data.ptr);
+								events[i].data.ptr = NULL;
 							}
+						}else{
 							event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
 							event.data.ptr = eventData;
-							epoll_ctl(efd, EPOLL_CTL_MOD, eventData->fd, &event);
-						}else{
-                            int done = 0;
-
-							// int type = *((int*)events[i].data.ptr);
-							if((eventData->bin) == 0){
-                            	done = handle_conn(eventData);
-							}else{
-								done = handle_conn_bin(eventData);
-								// done = 2;
-							}
-
-
-                            if (done == 1)
-                            {
-                                printf ("Closed connection on descriptor %d\n",
-                                        (((SocketData*)events[i].data.ptr)->fd));
-                                close (((SocketData*)events[i].data.ptr)->fd);
-								if(events[i].data.ptr){
-									free(events[i].data.ptr);
-									events[i].data.ptr = NULL;
-								}
-                            }else{
-								event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
-								event.data.ptr = eventData;
-								epoll_ctl(epfd, EPOLL_CTL_MOD, eventData->fd, &event);
-							}
+							epoll_ctl(epfd, EPOLL_CTL_MOD, eventData->fd, &event);
 						}
+					}
                 }
             }
     }
@@ -608,9 +535,7 @@ void * thread_f(void * arg){
 }
 
 
-void wait_for_clients()
-{
-	// int csock;
+void wait_for_clients(){
     int number_of_processors = sysconf(_SC_NPROCESSORS_ONLN);
     pthread_t clientes[number_of_processors+1];
     for (int i = 0; i < number_of_processors; i++){
@@ -618,13 +543,10 @@ void wait_for_clients()
     }
     for (int i = 0; i < number_of_processors; i++){
         pthread_join(clientes[i], NULL);
-		// pthread_create(&clientes[i], NULL, thread_f, lsock + (void*)0);
     }
-	/* Esperamos una conexión, no nos interesa de donde viene */
     return;
 }
 
-/* Crea un socket de escucha en puerto 4040 TCP */
 int mk_lsock(int port)
 {
 	struct sockaddr_in sa;
@@ -664,10 +586,3 @@ int mk_lsock(int port)
 
 	return sock;
 }
-
-// int main()
-// {
-// 	int lsock;
-// 	lsock = mk_lsock();
-// 	wait_for_clients(lsock);
-// }

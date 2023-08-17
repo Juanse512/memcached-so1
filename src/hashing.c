@@ -60,12 +60,13 @@ Word * find_word(char * word, int len){
     unsigned int position = first_hash % tableSize;
     int flag = 1;
     pthread_mutex_t* lock = get_lock(position);
-    // deadlock aca
+
     pthread_mutex_lock(lock);
 
     Word * aux = hashTable[position];
     Word * returnValue = NULL;
     while(aux != NULL && flag != 0){
+        
         if(aux->hash == first_hash){
             if(aux->word.string != NULL){ 
                 CompString wordString;
@@ -73,54 +74,34 @@ Word * find_word(char * word, int len){
                 wordString.len = len;
                 if(compare_string(wordString, aux->word) == 0){
                     returnValue = aux;
-                    if(returnValue->prev_delete != NULL){
-                        pthread_mutex_lock(&lastElemLock);
-                        if(returnValue == lastElemDelete){
-                            lastElemDelete = returnValue->prev_delete;
-                        }
-                        pthread_mutex_unlock(&lastElemLock);
-                        pthread_mutex_t* prev_lock = get_lock(returnValue->prev_delete->hash % tableSize);
-                        pthread_mutex_t* next_lock = NULL;
-                        if(returnValue->next_delete){
-                            unsigned int pos = (returnValue->next_delete->hash) % tableSize;
-                             next_lock = get_lock(pos);
-                        }
+                    
+                    pthread_mutex_t* next_lock = returnValue->next_delete ? get_lock(returnValue->next_delete->hash % tableSize) : NULL;
+                    pthread_mutex_t* prev_lock = returnValue->prev_delete ? get_lock(returnValue->prev_delete->hash % tableSize) : NULL;
+                    
+                    pthread_mutex_lock(&lastElemLock);
+                    if(returnValue == lastElemDelete)
+                        lastElemDelete = returnValue->prev_delete;
+                    pthread_mutex_unlock(&lastElemLock);
 
-                        // PUEDE ENTRAR EN DEADLOCK? CREO QUE NO
-                        // if(prev_lock != next_lock){
-                        //     if(prev_lock != lock){
-                                pthread_mutex_lock(prev_lock);
-                        //     }
-                        //     if(next_lock != lock && next_lock != NULL){
-                                if(next_lock)
-                                    pthread_mutex_lock(next_lock);
+                    if(prev_lock)
+                        pthread_mutex_lock(prev_lock);
 
-                        //     }
+                    if(next_lock)
+                        pthread_mutex_lock(next_lock);
 
-                                returnValue->prev_delete->next_delete = returnValue->next_delete;
+                    if(returnValue->next_delete)
+                        returnValue->next_delete->prev_delete = returnValue->prev_delete;
+                    
+                    if(returnValue->prev_delete)
+                        returnValue->prev_delete->next_delete = returnValue->next_delete;
+                    if(next_lock)
+                        pthread_mutex_unlock(next_lock);
 
-                        //     if(next_lock != lock && next_lock != NULL){
-                                if(next_lock)
-                                    pthread_mutex_unlock(next_lock);
-                        //     }
-                        //     if(prev_lock != lock){
-                                pthread_mutex_unlock(prev_lock);
-                        //     }
-                        // }else{
-                        //     if(prev_lock != lock){
-                        //         pthread_mutex_lock(prev_lock);
-                        //     }
-                        //         returnValue->prev_delete->next_delete = returnValue->next_delete;
-                        //     if(prev_lock != lock){
-                        //         pthread_mutex_unlock(prev_lock);
-                        //     }
-                        // }
-                    }
-                    returnValue->prev_delete = NULL;
-                    pthread_mutex_lock(&firstElemLock);
-                    returnValue->next_delete = firstElemDelete;
-                    firstElemDelete = returnValue;
-                    pthread_mutex_unlock(&firstElemLock);
+                    if(prev_lock)
+                        pthread_mutex_unlock(prev_lock);
+                    
+                    set_firstElem(returnValue);
+                    
                     flag = 0;
                 }
             }
@@ -131,94 +112,63 @@ Word * find_word(char * word, int len){
     return returnValue;
 }
 
+Word * initialize_word(char * key, char * value, int keyLength, int valueLength, int mode, unsigned int firstHash){
+    Word * newWord = robust_malloc(sizeof(Word));
+    newWord->next = NULL;
+    newWord->prev = NULL;
+    newWord->hash = firstHash;
+
+    newWord->word.string = key;
+    newWord->word.len = keyLength;
+
+    newWord->value.string = value;
+    newWord->value.len = valueLength;
+    newWord->bin = mode;
+    return newWord;
+}
+
+
 int hash_word(char * key, char * value,int counter, int keyLength, int valueLength, int mode){
     int ret = 0;
     Word * foundPos = find_word(key, keyLength);
 
     if(foundPos == NULL){
         unsigned int firstHash = 0, position = 0;
+        
         firstHash = hash_first(key);
         position = firstHash % (unsigned int)counter;
 
-
-        Word * newWord = malloc(sizeof(Word));
-        printf("BEFORE FREE\n");
-        while(newWord == NULL){
-            freeMemory();
-            printf("FREE MEMORY INSERT\n");
-            newWord = malloc(sizeof(Word));
-        }
-        newWord->next = NULL;
-        newWord->prev = NULL;
-        newWord->hash = firstHash;
-
-        newWord->word.string = key;
-        newWord->word.len = keyLength;
-
-        newWord->value.string = value;
-        newWord->value.len = valueLength;
-        newWord->bin = mode;
+        Word * newWord = initialize_word(key, value, keyLength, valueLength, mode, firstHash);
     
-        printf("AFTER FREE\n");
         pthread_mutex_t* lock = get_lock(position);
+        
         pthread_mutex_lock(lock);
         hashTable[position] = insert_word(hashTable[position], newWord);
         pthread_mutex_unlock(lock);
+        
         ret = 1;
     }else{
         free(foundPos->value.string);
-        // foundPos->value.string = malloc(sizeof(char)*valueLength);
-        // memcpy(foundPos->value.string, value, valueLength);
         foundPos->value.string = value;
         foundPos->value.len = valueLength;
         foundPos->bin = mode;
         free(key);
         ret = 1;
     }
-    
-    // *size = tableSize;
+
     return ret;
 }
 
 int find_elem_to_delete(char * word, int len){
-    unsigned int first_hash = hash_first(word);
-    unsigned int position = first_hash % tableSize;
-    int flag = 0;
-    pthread_mutex_t* lock = get_lock(position);
-    pthread_mutex_lock(lock);
-    Word * aux = hashTable[position];
-    CompString wordString;
-    wordString.string = word;
-    wordString.len = len;
-    if(aux){
-        if(aux->hash == first_hash){
-            if(aux->word.string != NULL){ 
-                    
-                    if(compare_string(wordString, aux->word) == 0){
-                        hashTable[position] = aux->next;
-                        free(aux->word.string);
-                        free(aux->value.string);
-                        free(aux);
-                        flag = 1;
-                    }
-                }
-        }else{
-            while(aux->next != NULL){
-                if(aux->next->hash == first_hash){
-                    if(aux->next->word.string != NULL){ 
-                        if(compare_string(wordString, aux->next->word) == 0){
-                            delete_element(aux, aux->next);
-                            flag = 1;
-                            break;
-                        }
-                    }
-                }
-                aux = aux->next;
-            }
-
-        }
+    Word * foundPos = find_word(word, len);
+    if(foundPos){
+        unsigned int pos = foundPos->hash % tableSize; 
+        pthread_mutex_t* lock = get_lock(pos);
+        pthread_mutex_lock(lock);
+        delete_element(foundPos, foundPos->hash);
+        pthread_mutex_unlock(lock);
+        return 1;
+    }else{
+        return 0;
     }
-    pthread_mutex_unlock(lock);
-    return flag;
-    
 }

@@ -48,29 +48,19 @@ void clean_array(Word ** hashTable, int counter);
 // Toma una palabra o el indice de una y la coloca al final de la Word que le pasamos, devuelve la Word actualizada
 Word * insert_word(Word * word, Word * newWord);
 
-//save_word: (char *, char **, int) -> ()
-// Guarda una palabra en el array que le pasamos, en la posicion dada
-// void save_word(char * word, char * dictionary[], int index);
-
-// save_word: (char ***, int, int) -> (char***)
-// Dado el puntero de un array de punteros y un contador, si el contador es mayor al tamaño del array, se triplica el tamaño de este y devuelve el puntero modificado
-// free_list: (Word *) -> ()
-// Libera la lista enlazada de un Word
-void free_list(Word * word);
-
-// free_all: (char **, Word **, int, int) -> ()
-// Libera el diccionario y la tabla hash
-void free_all(Word ** hashTable);
-
 void init();
 
 char ** parser(char* str);
 
 pthread_mutex_t* get_lock(unsigned int position);
 
-void delete_element(Word * prev, Word * actual);
+void delete_element(Word * actual, unsigned int hash);
 
 int compare_string(CompString s1, CompString s2);
 
 void freeMemory();
+
+void * robust_malloc(size_t size);
+
+void set_firstElem(Word * element);
 #endif

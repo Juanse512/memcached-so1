@@ -1,6 +1,4 @@
-- frees
-- cambiar sistema de locks en cola de prioridad, array paralelo de locks exclusivo para cola de prioridad, solo lockear este y no
-toda la region de la tabla hash
+
+- revisar codigo
 - comentar
 - informe
-- arreglar bug freeMemory - revisar que no tome el mismo lock 2 veces

@@ -4,7 +4,7 @@
 generate_bin(3) -> <<0,0,0>>;
 generate_bin(2) -> <<0,0>>;
 generate_bin(1) -> <<0>>;
-generate_bin(N) -> <<>>.
+generate_bin(_) -> <<>>.
 
 compare_response(V) ->
     AsciiCode = V,
@@ -19,9 +19,9 @@ start(Hostname,Port) ->
     {ok, Sock} = gen_tcp:connect(Hostname, Port, 
                                  [binary, {packet, 0}]),
     Sock.
-
+ 
 decode(Tail) ->
-    [A, B, C, D | Ntail] = Tail,
+    [_, _, _, _ | Ntail] = Tail,
     Ntail.
 
 get(Sock,Key) ->
@@ -30,7 +30,6 @@ get(Sock,Key) ->
     BinR = binary:part(Bin, {byte_size(Bin), 2-byte_size(Bin)}),
     Rest = generate_bin(4 - (byte_size(BinR)-string:len(Key))),
     R = <<Comm/binary, Rest/binary, BinR/binary>>,
-    % io:fwrite("~p ~p ~n", [R, (4 - (byte_size(BinR)-string:len(Key)))]),
     gen_tcp:send(Sock, R),
     receive
         {tcp, Sock, Paquete} -> List = binary_to_list(Paquete),
@@ -51,7 +50,7 @@ del(Sock,Key) ->
     gen_tcp:send(Sock, R),
     receive
         {tcp, Sock, Paquete} -> List = binary_to_list(Paquete),
-                                [Head | Tail] = List,
+                                [Head | _] = List,
                                 compare_response(Head)
     end.
 
@@ -83,7 +82,7 @@ put(Sock,Key,Value) ->
     gen_tcp:send(Sock, R),
     receive
         {tcp, Sock, Paquete} -> List = binary_to_list(Paquete),
-                                [Head | Tail] = List,
+                                [Head | _] = List,
                                 compare_response(Head)
     end.
 
@@ -91,6 +90,6 @@ put(Sock,Key,Value) ->
 test(N) -> 
     Sock = start("localhost", 889),
     testAux(Sock, N).
-testAux(Sock, 0) -> ok;
+testAux(_, 0) -> ok;
 testAux(Sock, N) -> put(Sock, integer_to_list(N), integer_to_list(N)),
                     testAux(Sock, N-1).
