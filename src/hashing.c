@@ -66,7 +66,6 @@ Word * find_word(char * word, int len){
     Word * aux = hashTable[position];
     Word * returnValue = NULL;
     while(aux != NULL && flag != 0){
-        
         if(aux->hash == first_hash){
             if(aux->word.string != NULL){ 
                 CompString wordString;
@@ -74,7 +73,11 @@ Word * find_word(char * word, int len){
                 wordString.len = len;
                 if(compare_string(wordString, aux->word) == 0){
                     returnValue = aux;
-                    
+                    printf("HERE %s\n", returnValue->value.string);
+                    if(returnValue->next_delete) /// aca
+                        printf("next %u\n", returnValue->next_delete->hash);
+                    if(returnValue->prev_delete)
+                        printf("prev %u\n", returnValue->prev_delete->hash);
                     pthread_mutex_t* next_lock = returnValue->next_delete ? get_lock(returnValue->next_delete->hash % tableSize) : NULL;
                     pthread_mutex_t* prev_lock = returnValue->prev_delete ? get_lock(returnValue->prev_delete->hash % tableSize) : NULL;
                     
@@ -113,7 +116,9 @@ Word * find_word(char * word, int len){
 }
 
 Word * initialize_word(char * key, char * value, int keyLength, int valueLength, int mode, unsigned int firstHash){
-    Word * newWord = robust_malloc(sizeof(Word));
+    Word * newWord = robust_malloc(sizeof(Word), 0);
+    if(newWord == NULL)
+        return NULL;
     newWord->next = NULL;
     newWord->prev = NULL;
     newWord->hash = firstHash;
@@ -139,7 +144,8 @@ int hash_word(char * key, char * value,int counter, int keyLength, int valueLeng
         position = firstHash % (unsigned int)counter;
 
         Word * newWord = initialize_word(key, value, keyLength, valueLength, mode, firstHash);
-    
+        if(newWord == NULL)
+            return -1;
         pthread_mutex_t* lock = get_lock(position);
         
         pthread_mutex_lock(lock);

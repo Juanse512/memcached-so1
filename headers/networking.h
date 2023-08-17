@@ -3,9 +3,9 @@
 #include <stdint.h>
 
 
-static void epoll_ctl_add(int epfd, int fd, uint32_t events);
+void epoll_ctl_add(int epfd, int fd, uint32_t events);
 
-static int make_socket_non_blocking (int sfd);
+int make_socket_non_blocking (int sfd);
 
 void * thread_f(void * arg);
 

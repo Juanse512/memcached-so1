@@ -1,4 +1,4 @@
-
+- probar funciones individuales con valgrind 
 - revisar codigo
 - comentar
 - informe

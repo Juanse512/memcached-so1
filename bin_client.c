@@ -233,7 +233,7 @@ void del(const char *k)
 /* Lee todo lo que haya en stdin */
 char * input(int *lenp)
 {
-	char *ret = robust_malloc((size_t)1024);
+	char *ret = robust_malloc((size_t)1024, 0);
 	int off = 0, sz = 1024;
 	int rc;
     printf("read\n");

@@ -11,6 +11,7 @@ compare_response(V) ->
     case AsciiCode of
         111 -> einval;
         112 -> enotfound;
+        115 -> eunk;
         101 -> ok
     end.
 

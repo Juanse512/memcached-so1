@@ -29,6 +29,7 @@ enum code {
 	EBINARY = 113,
 	EBIG = 114,
 	EUNK = 115,
+	EMEM = 116
 };
 
 int epfd = 0;
@@ -60,7 +61,7 @@ static void epoll_ctl_add(int epfd, int fd, uint32_t events)
 {
 	struct epoll_event ev;
 	ev.events = events;
-	ev.data.ptr = robust_malloc(sizeof(SocketData));
+	ev.data.ptr = robust_malloc(sizeof(SocketData), 1);
 	((SocketData*)ev.data.ptr)->fd = fd;
 	((SocketData*)ev.data.ptr)->buf = NULL;
 	((SocketData*)ev.data.ptr)->index = 0; 
@@ -110,14 +111,19 @@ void input_handler_bin(int csock, int mode, char* key, char* val, int keyLen, in
 
 	if(mode == PUT){
 		int res = hash_word(key, val, tableSize, keyLen, valLen, 1);
-		comm = OK;
-		write(csock, &comm, 1);
-		pthread_mutex_lock(&putsLock);
-		PUTS++;
-		pthread_mutex_unlock(&putsLock);
-		pthread_mutex_lock(&kvLock);
-		KEYVALUES += res;
-		pthread_mutex_unlock(&kvLock);
+		if(res == -1){
+			comm = EMEM;
+			write(csock, &comm, 1);
+		}else{
+			comm = OK;
+			write(csock, &comm, 1);
+			pthread_mutex_lock(&putsLock);
+			PUTS++;
+			pthread_mutex_unlock(&putsLock);
+			pthread_mutex_lock(&kvLock);
+			KEYVALUES += res;
+			pthread_mutex_unlock(&kvLock);
+		}
 		ok = 1;
 	}
 	if(mode == DEL){
@@ -193,7 +199,9 @@ int text_consume(int fd, char ** buf_p, int * index, int * size, int * a_size){
 	int valid = -1;
 	if(*buf_p == NULL || size == 0){
 		*a_size = 2049;
-		buf = robust_malloc(sizeof(char) * (*a_size));
+		buf = robust_malloc(sizeof(char) * (*a_size), 0);
+		if(buf == NULL)
+			return -3;
 	}else{
 		buf = *buf_p;
 	}
@@ -223,7 +231,9 @@ int text_consume_bin(int fd, char ** buf_p, int * index, int * size, int * a_siz
 	char * buf;
 	if(*buf_p == NULL || size == 0){
 		*a_size = 2049;
-		buf = robust_malloc(sizeof(char) * (*a_size));
+		buf = robust_malloc(sizeof(char) * (*a_size), 0);
+		if(buf == NULL)
+			return -1;
 	}else{
 		buf = *buf_p;
 	}
@@ -273,7 +283,10 @@ int parse_text_bin(int fd, char * buf, int buf_size, int index){
 		return -1;
 
 
-	key = robust_malloc(sizeof(char)*(size+1));
+	key = robust_malloc(sizeof(char)*(size+1), 0);
+
+	if(key == NULL)
+		return -2;
 	int k = 0;
 	// liberar memoria de nuevo?
 
@@ -288,7 +301,9 @@ int parse_text_bin(int fd, char * buf, int buf_size, int index){
 			return -1;
 		
 
-		value = robust_malloc(sizeof(char)*(vSize+1));
+		value = robust_malloc(sizeof(char)*(vSize+1), 0);
+		if(value == NULL)
+			return -2;
 		k = 0;
 		for(int i = (index + 4); i < (vSize+index+4); i++)
 			value[k++] = buf[i];
@@ -326,18 +341,26 @@ void input_handler(int csock, char ** tok){
 	if(strcmp(tok[0], "PUT") == 0){
 		int len = strlen(tok[1]);
 		int lenV = strlen(tok[2]);
-		char * key = robust_malloc(sizeof(char) * len);
-		char * value = robust_malloc(sizeof(char) * lenV);
-		memcpy(key, tok[1], len);
-		memcpy(value, tok[2], lenV);
-		int res = hash_word(key, value, tableSize, strlen(tok[1]), strlen(tok[2]), 0);
-		sprintf(reply, "OK\n");
-		pthread_mutex_lock(&putsLock);
-		PUTS++;
-		pthread_mutex_unlock(&putsLock);
-		pthread_mutex_lock(&kvLock);
-		KEYVALUES += res;
-		pthread_mutex_unlock(&kvLock);
+		char * key = robust_malloc(sizeof(char) * len, 0);
+		char * value = robust_malloc(sizeof(char) * lenV, 0);
+		if(!key || !value){
+			sprintf(reply, "EMEM\n");
+		}else{
+			memcpy(key, tok[1], len);
+			memcpy(value, tok[2], lenV);
+			int res = hash_word(key, value, tableSize, strlen(tok[1]), strlen(tok[2]), 0);
+			if(res == -1)
+				sprintf(reply, "EMEM\n");
+			else{
+				sprintf(reply, "OK\n");
+				pthread_mutex_lock(&putsLock);
+				PUTS++;
+				pthread_mutex_unlock(&putsLock);
+				pthread_mutex_lock(&kvLock);
+				KEYVALUES += res;
+				pthread_mutex_unlock(&kvLock);
+			}
+		}
 		ok = 1;
 	}
 
@@ -382,24 +405,35 @@ void input_handler(int csock, char ** tok){
 
 int handle_conn(SocketData * event)
 {
-	char tok[3][1000];
 	int res_text;
 	while (1) {
 		/* Atendemos pedidos, uno por linea */
 		// rc = fd_readline(csock, buf);
 		res_text = text_consume(event->fd, &(event->buf), &(event->index), &(event->size), &(event->a_len));
-		if(res_text == 0){
+		switch (res_text){
+		case 0:
 			close(event->fd);
 			return 1;
-		}
-		if(res_text == -1){
+			break;
+		case -1:
 			return 2;
-		}
-		if(res_text == -2){
-			// EBIG
+			break;
+		case -2:
+			write(event->fd, "EBIG\n", 5);
 			return 2;
+			break;
+		case -3:
+			write(event->fd, "EMEM\n", 5);
+			return 2;
+			break;
 		}
+
 		char ** tokP = parser(event->buf);
+		if(tokP == NULL){
+			write(event->fd, "EMEM\n", 5);
+			return 2;
+		}
+
 		// parser(event->buf, tok);
 		input_handler(event->fd, tokP);
 		if(res_text == 1){
@@ -423,14 +457,24 @@ int handle_conn_bin(SocketData * event)
 	int res, res_text;
 	while (1) {
 
-
 		res_text = text_consume_bin(event->fd, &(event->buf), &(event->index), &(event->size), &(event->a_len));
 		if(res_text == 0){
 			close(event->fd);
 			return 1;
 		}
+		if(res_text == -1){
+			int comm = EMEM;
+			write(event->fd, &comm, 1);
+			return 2;
+		}
 		res = parse_text_bin(event->fd, (event->buf), event->size, event->index);
-		if(res == 0){
+		
+		if(res <= 0){
+			if(res == -2){
+				int comm = EMEM;
+				write(event->fd, &comm, 1);
+			}
+
 			if(event->buf)
 				free(event->buf);
 			
@@ -461,7 +505,11 @@ void * thread_f(void * arg){
 				if (s == -1)
 					abort();
 				event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
-				SocketData* ctx = robust_malloc(sizeof(SocketData));
+				SocketData* ctx = robust_malloc(sizeof(SocketData), 0);
+				if(ctx == NULL){
+					close(infd);
+					continue;
+				}
 				ctx->fd = infd;
 				ctx->bin = 0;
 				ctx->buf = NULL;
@@ -487,7 +535,11 @@ void * thread_f(void * arg){
 						if (s == -1)
 							abort ();
 						event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
-						SocketData* ctx = robust_malloc(sizeof(SocketData));
+						SocketData* ctx = robust_malloc(sizeof(SocketData), 0);
+						if(ctx == NULL){
+							close(infd);
+							continue;
+						}
 						ctx->fd = infd;
 						ctx->bin = 1;
 						ctx->buf = NULL;
@@ -515,10 +567,12 @@ void * thread_f(void * arg){
 
 						if (done == 1)
 						{
-							printf ("Closed connection on descriptor %d\n",
+							printf ("Desconectado file descriptor: %d\n",
 									(((SocketData*)events[i].data.ptr)->fd));
 							close (((SocketData*)events[i].data.ptr)->fd);
 							if(events[i].data.ptr){
+								if(((SocketData*)events[i].data.ptr)->buf)
+									free(((SocketData*)events[i].data.ptr)->buf);
 								free(events[i].data.ptr);
 								events[i].data.ptr = NULL;
 							}

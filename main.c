@@ -16,17 +16,15 @@ int main(int argc, char *argv[])
 
     init();
     if (setuid(0) != 0) {
-        perror("setuid");
+        printf("Operacion no permitida: Ejecute el programa como root.\n");
         return 1;
     }
-        lsock = mk_lsock(888);
-        binlsock = mk_lsock(889);
+    lsock = mk_lsock(888);
+    binlsock = mk_lsock(889);
     if (setuid(1000) != 0) {
-        perror("setuid");
+        printf("Error al reducir privilegios, programa detenido por seguridad.\n");
         return 1;
     }
-    printf("UID: %d\n", getuid());
-    printf("UID: %d\n", geteuid());
 	wait_for_clients();
     return 0;
 }

@@ -48,7 +48,7 @@ void clean_array(Word ** hashTable, int counter){
 
 void init_lock(pthread_mutex_t* lock, pthread_mutexattr_t* Attr){
     if (pthread_mutex_init(lock, Attr) != 0) {
-        printf("\n mutex init failed\n");
+        printf("\n Fallo en la inicialización de mutex\n");
         exit(1);
     }
 }
@@ -87,26 +87,32 @@ void init(){
     firstElemDelete = NULL;
     lastElemDelete = NULL;
     lockSize = tableSize / 10;
-    locks = robust_malloc((sizeof(pthread_mutex_t) * lockSize) + 1);
+    locks = robust_malloc((sizeof(pthread_mutex_t) * lockSize) + 1, 1);
     for(int i = 0; i < lockSize; i++){
         init_lock(&locks[i], &Attr);
     }
-    hashTable = robust_malloc(sizeof(Word *) * tableSize);
+    hashTable = robust_malloc(sizeof(Word *) * tableSize, 1);
     clean_array(hashTable, tableSize);
     return;
 }
 
 
 char ** parser(char* str){
-    char ** tP = robust_malloc(sizeof(char*)*4);
+    char ** tP = robust_malloc(sizeof(char*)*4 , 0);
+    if(tP == NULL)
+        return NULL;
     char *token; 
     token = strtok(str, " ");
-    tP[0] = robust_malloc(sizeof(char) * strlen(token)); 
+    tP[0] = robust_malloc(sizeof(char) * strlen(token), 0); 
+    if(tP[0] == NULL)
+        return NULL;
     strcpy(tP[0], token);
     int i = 1;
     token = strtok(NULL, " ");
     while(token != NULL){
-        tP[i] = robust_malloc(sizeof(char) * strlen(token)); 
+        tP[i] = robust_malloc(sizeof(char) * strlen(token), 0); 
+        if(tP[i] == NULL)
+            return NULL;
         strcpy(tP[i++], token);
         token = strtok(NULL, " ");
     }
@@ -130,7 +136,6 @@ void delete_element(Word * actual, unsigned int hash){
     Word * prev_delete = actual->prev_delete;
     pthread_mutex_t* prevL = NULL;
     pthread_mutex_t* nextL = NULL;
-    printf("prev %p next %p\n", prev_delete, next_delete);
     if(prev_delete){
         unsigned int pos = prev_delete->hash % tableSize;
         prevL = get_lock(pos);
@@ -191,6 +196,7 @@ int compare_string(CompString s1, CompString s2){
 
 
 void freeMemory(){
+    printf("IN FREE MEMORY\n");
     pthread_mutex_lock(&lastElemLock);
     if(lastElemDelete == NULL){
         pthread_mutex_unlock(&lastElemLock);
@@ -230,16 +236,17 @@ void freeMemory(){
     
     if(elem_to_delete->next)
         elem_to_delete->next->prev = elem_to_delete->prev;
-    
+
+    if(elem_to_delete->prev_delete)
+        elem_to_delete->prev_delete->next_delete = elem_to_delete->next_delete;
+        
+    if(elem_to_delete->next_delete)
+        elem_to_delete->next_delete->prev_delete = elem_to_delete->prev_delete;
+
+
     if(elem_to_delete == lastElemDelete)
         lastElemDelete = aux;
-    else{
-        if(elem_to_delete->prev_delete)
-            elem_to_delete->prev_delete->next_delete = elem_to_delete->next_delete->prev_delete;
-        
-        if(elem_to_delete->next_delete)
-            elem_to_delete->next_delete->prev_delete = elem_to_delete->prev_delete->next_delete;
-    }
+
 
     free(elem_to_delete->word.string);
     free(elem_to_delete->value.string);
@@ -247,16 +254,23 @@ void freeMemory(){
 
     pthread_mutex_unlock(lock);
     pthread_mutex_unlock(&lastElemLock);
+    pthread_mutex_lock(&kvLock);
+    KEYVALUES--;
+    pthread_mutex_unlock(&kvLock);
     return;
 }
 
 
 
-void * robust_malloc(size_t size){
+void * robust_malloc(size_t size, int init){
     void * pointer = malloc(size);
     while(pointer == NULL){
         freeMemory();
         pointer = malloc(size);
+    }
+    if(pointer == NULL && init){
+        printf("Memoria insuficiente para iniciar el servidor\n");
+        exit(1);
     }
     return pointer;
 }

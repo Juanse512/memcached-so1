@@ -60,7 +60,7 @@ int compare_string(CompString s1, CompString s2);
 
 void freeMemory();
 
-void * robust_malloc(size_t size);
+void * robust_malloc(size_t size, int init);
 
 void set_firstElem(Word * element);
 #endif
