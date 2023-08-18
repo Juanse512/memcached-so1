@@ -15,7 +15,7 @@
 #include "../headers/helpers.h"
 #include "../headers/hashing.h"
 #include "../headers/io.h"
-
+#include "../headers/networking.h"
 enum code {
 	PUT = 11,
 	DEL = 12,

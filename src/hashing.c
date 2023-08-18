@@ -7,7 +7,7 @@
 #include <pthread.h>
 #include "../headers/io.h"
 #include "../headers/helpers.h"
-
+#include "../headers/hashing.h"
 //MurmurHash2: (const void *, int, unsigned int) -> (unsigned int)
 // Funcion de hasheo basada en el MurmurHash, fuente: https://sites.google.com/site/murmurhash/
 unsigned int MurmurHash2 ( const void * key, int len, unsigned int seed ){

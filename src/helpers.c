@@ -14,7 +14,7 @@
 #include <fcntl.h>
 #include "../headers/io.h"
 #include "../headers/hashing.h"
-
+#include "../headers/helpers.h"
 //insert_word: (Word *, Word *) -> (Word*)
 // Toma el primer elemento de una lista y un nuevo nodo e inserta este al final de la cola
 Word * insert_word(Word * word, Word * newWord){
