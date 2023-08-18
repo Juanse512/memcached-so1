@@ -20,9 +20,7 @@ enum code {
 	PUT = 11,
 	DEL = 12,
 	GET = 13,
-
 	STATS = 21,
-
 	OK = 101,
 	EINVALID = 111,
 	ENOTFOUND = 112,
@@ -35,13 +33,12 @@ enum code {
 int epfd = 0;
 
 typedef struct SocketDataS {
-    int fd;
-    int bin;
-	char * buf;
-	int index;
-	int size;
-	int a_len;
-    // Add any other fields you might need
+    int fd; // file descriptor del socket
+    int bin; // flag para saber si es binario
+	char * buf; // buffer de entrada
+	int index; // indice en el buffer
+	int size; // bytes usados del buffer
+	int a_len; // tamaño total del buffer
 } SocketData;
 
 
@@ -55,9 +52,9 @@ int READ(int fd, char * buf, int n) {						\
 	}
 
 
-
-
-static void epoll_ctl_add(int epfd, int fd, uint32_t events)
+//epoll_ctl_add: (int, int, uint32_t) -> ()
+// Agrega un socket a la instancia de epoll
+void epoll_ctl_add(int epfd, int fd, uint32_t events)
 {
 	struct epoll_event ev;
 	ev.events = events;
@@ -73,8 +70,9 @@ static void epoll_ctl_add(int epfd, int fd, uint32_t events)
 	}
 }
 
-
-static int make_socket_non_blocking (int sfd)
+//make_socket_non_blocking: (int) -> (int)
+// Toma un file descriptor y hace el socket no bloqueante
+int make_socket_non_blocking (int sfd)
 {
   int flags, s;
   
@@ -100,9 +98,14 @@ static int make_socket_non_blocking (int sfd)
 
 int U = 0;
 
+//read_byte(int, char*) -> (int)
+// Lee un byte de un file descriptor y lo guarda en el char* byte
 int read_byte(int fd, char* byte){
 	return READ(fd, byte, 1);
 }
+//inpunt_handler_bin: (int, int, char*, char*, int, int) -> ()
+// Handler de input del modo binario, dado los argumentos necesarios para hacer una request, llama a las funciones necesarias
+// para ejecutarla, ademas actualiza los valores del STATS
 void input_handler_bin(int csock, int mode, char* key, char* val, int keyLen, int valLen){
 	char reply[MAX_RESPONSE];
 	int ok = 0;
@@ -111,6 +114,7 @@ void input_handler_bin(int csock, int mode, char* key, char* val, int keyLen, in
 
 	if(mode == PUT){
 		int res = hash_word(key, val, tableSize, keyLen, valLen, 1);
+		// Si devuelve -1 significa que no hay memoria disponible, devuelvo EMEM
 		if(res == -1){
 			comm = EMEM;
 			write(csock, &comm, 1);
@@ -187,6 +191,7 @@ void input_handler_bin(int csock, int mode, char* key, char* val, int keyLen, in
 		comm = EINVAL;
 		write(csock, &comm, 1);
 	}
+	// Libero la key si no la guarde usando PUT
 	if(mode != PUT){
 		if(key){
 			free(key);
@@ -194,9 +199,14 @@ void input_handler_bin(int csock, int mode, char* key, char* val, int keyLen, in
 	}
 	return;
 }
+//text_consume: (int, char **, int *, int *, int *) -> (int)
+// Consume el buffer del file descriptor en modo texto
+// Devuelve -1 si no se termino de consumir un comando entero, -2 si el comando es demasiado grande para este modo
+// -3 si no tengo memoria disponible, 0 si no hay nada que leer y 1 si se pudo leer y no hubo problemas
 int text_consume(int fd, char ** buf_p, int * index, int * size, int * a_size){
 	char * buf;
 	int valid = -1;
+	// Si no tengo buffer anterior, lo creo
 	if(*buf_p == NULL || size == 0){
 		*a_size = 2049;
 		buf = robust_malloc(sizeof(char) * (*a_size), 0);
@@ -227,6 +237,9 @@ int text_consume(int fd, char ** buf_p, int * index, int * size, int * a_size){
 	
 	return valid;
 }
+//text_consume_bin: (int, char **, int *, int *, int *) -> (int)
+// Consume el buffer del file descriptor en modo binario
+// Devuelve -1 si no hay memoria disponible, 0 si no hay nada que leer y 1 si todo salio correctamente
 int text_consume_bin(int fd, char ** buf_p, int * index, int * size, int * a_size){
 	char * buf;
 	if(*buf_p == NULL || size == 0){
@@ -257,7 +270,12 @@ int text_consume_bin(int fd, char ** buf_p, int * index, int * size, int * a_siz
 	return 1;
 }
 
+//parse_text_bin: (int, char *, int, int) -> (int)
+// Parser de un buffer en protocolo binario, toma un conjunto de bits, lo separa en argumentos y llama a las funciones
+// para llevar a cabo la orden
+// Devuelve 0 si consumi todo el buffer, -1 si faltan datos, -2 si no tengo memoria disponible
 int parse_text_bin(int fd, char * buf, int buf_size, int index){
+	// Si llegue al final del buffer devuelvo 0
 	if(index >= buf_size)
 		return 0;
 	
@@ -265,6 +283,8 @@ int parse_text_bin(int fd, char * buf, int buf_size, int index){
 		input_handler_bin(fd, STATS, NULL, NULL, 0, 0);
 		return parse_text_bin(fd, buf, buf_size, index + 1);
 	}
+
+	// Si tengo menos de 5 bytes no tengo suficientes datos para ejecutar el resto de los comandos
 	if(buf_size < 5)
 		return -1;
 	
@@ -275,10 +295,12 @@ int parse_text_bin(int fd, char * buf, int buf_size, int index){
 
 	int size = ((int)buf[index+1] * pow(256,3)) + ((int)buf[index+2] * pow(256,2)) + ((int)buf[index+3] * pow(256,1)) + ((int)buf[index+4]);
 	int vSize = 0;
+
+	// Si tengo menos bytes de los que indica el size entonces faltan datos
 	if((buf_size-5-index) < size)
 		return -1;
 	
-
+	// Si tengo menos bytes de los que indica el size y ademas esta en modo put y no tengo el tamaño del value entonces faltan datos
 	if(mode == PUT && (size + 9) > buf_size)
 		return -1;
 
@@ -288,33 +310,40 @@ int parse_text_bin(int fd, char * buf, int buf_size, int index){
 	if(key == NULL)
 		return -2;
 	int k = 0;
-	// liberar memoria de nuevo?
 
 	for(int i = (index + 5); i < (size+index+5); i++){
 		key[k++] = buf[i];
 	}
 	key[k] = '\0';
 	index = (size + index + 5);
+	// Si el modo es PUT guardo el value
 	if(mode == PUT){
 		vSize = ((int)buf[index] * pow(256,3)) + ((int)buf[index+1] * pow(256,2)) + ((int)buf[index+2] * pow(256,1)) + ((int)buf[index+3]);
+		
 		if((buf_size-4-index) < vSize)
 			return -1;
 		
-
 		value = robust_malloc(sizeof(char)*(vSize+1), 0);
+		
 		if(value == NULL)
 			return -2;
+		
 		k = 0;
+		
 		for(int i = (index + 4); i < (vSize+index+4); i++)
 			value[k++] = buf[i];
 		
 		index = (vSize + index + 4);
 	}
+	// Llamo al input handle con el comando parseado
 	input_handler_bin(fd, mode, key, value, size, vSize);
+	// Itero de nuevo para consumir el resto del buffer
 	return parse_text_bin(fd, buf, buf_size, index);
 }
 
-
+//input_handler: (int, char**) -> ()
+// Handler de input del modo texto, dado los argumentos necesarios para hacer una request, llama a las funciones necesarias
+// para ejecutarla, ademas actualiza los valores del STATS
 void input_handler(int csock, char ** tok){
 	char reply[MAX_RESPONSE];
 	int ok = 0;
@@ -402,13 +431,14 @@ void input_handler(int csock, char ** tok){
 }
 
 
-
+//handle_conn: (SocketData *) -> (int)
+// Handler de la conexion del modo texto, se encarga de llamar a las funciones para parsear y ejecutar un comando
+// y dependiendo del resultado modifica o no el buffer correspondiente a ese file descriptor
+// Devuelve 1 si se cerro la conexion, 2 si no
 int handle_conn(SocketData * event)
 {
 	int res_text;
 	while (1) {
-		/* Atendemos pedidos, uno por linea */
-		// rc = fd_readline(csock, buf);
 		res_text = text_consume(event->fd, &(event->buf), &(event->index), &(event->size), &(event->a_len));
 		switch (res_text){
 		case 0:
@@ -434,8 +464,14 @@ int handle_conn(SocketData * event)
 			return 2;
 		}
 
-		// parser(event->buf, tok);
 		input_handler(event->fd, tokP);
+
+		for(int i = 0; i < 4; i++){
+			if(tokP[i])
+        		free(tokP[i]);
+		}
+
+		free(tokP);
 		if(res_text == 1){
 			if(event->buf)
 				free(event->buf);
@@ -451,9 +487,12 @@ int handle_conn(SocketData * event)
 	}
 }
 
+//handle_conn_bin: (SocketData *) -> (int)
+// Handler de la conexion del modo binario, se encarga de llamar a las funciones para parsear y ejecutar un comando
+// y dependiendo del resultado modifica o no el buffer correspondiente a ese file descriptor
+// Devuelve 1 si se cerro la conexion, 2 si no
 int handle_conn_bin(SocketData * event)
 {
-	// char buf[MAX_RESPONSE];
 	int res, res_text;
 	while (1) {
 
@@ -488,107 +527,92 @@ int handle_conn_bin(SocketData * event)
 }
 
 
-
+//thread_f: (void *) -> (void *)
+// Funcion encargada de aceptar y recibir requests de los sockets, hay una ejecucion de esta funcion por thread
 void * thread_f(void * arg){
     int nfds;
 	int efd, s;
-    struct epoll_event events[10]; // ver max events
+    struct epoll_event events[MAX_EVENTS];
 	struct epoll_event event;
     while(1){
-        nfds = epoll_wait(epfd, events, 10, -1);  //chequear error
+        nfds = epoll_wait(epfd, events, 10, -1); 
         for (int i = 0; i < nfds; i++) {
 			SocketData *eventData = ((SocketData *)events[i].data.ptr);
-			if (lsock == (eventData->fd)){ 
+			if (lsock == (eventData->fd) || binlsock == (eventData->fd)){ 
 				int infd;
-				infd = accept (lsock, NULL, NULL);
+				
+				if(lsock == (eventData->fd))
+					infd = accept (lsock, NULL, NULL);
+				else
+					infd = accept (binlsock, NULL, NULL);
+				
 				s = make_socket_non_blocking (infd);
+				
 				if (s == -1)
 					abort();
+				
 				event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
 				SocketData* ctx = robust_malloc(sizeof(SocketData), 0);
+				
 				if(ctx == NULL){
 					close(infd);
 					continue;
 				}
+				
 				ctx->fd = infd;
-				ctx->bin = 0;
+				ctx->bin = binlsock == (eventData->fd) ? 1 : 0;
 				ctx->buf = NULL;
 				ctx->index = 0; 
 				ctx->size = 0; 
 				ctx->a_len = 2049; 
 				event.data.ptr = ctx;
+				
 				s = epoll_ctl (epfd, EPOLL_CTL_ADD, infd, &event);
+				
 				if (s == -1)
 				{
 					perror ("epoll_ctl");
 					abort ();
 				}
+				
 				event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
 				event.data.ptr = eventData;
 				epoll_ctl(efd, EPOLL_CTL_MOD, eventData->fd, &event);
-                }else{
-					if (binlsock == (eventData->fd)){
-						int infd;
+                
+			}else{
+					int done = 0;
+					if((eventData->bin) == 0){
+						done = handle_conn(eventData);
+					}else{
+						done = handle_conn_bin(eventData);
+					}
 
-						infd = accept (binlsock, NULL, NULL);
-						s = make_socket_non_blocking (infd);
-						if (s == -1)
-							abort ();
-						event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
-						SocketData* ctx = robust_malloc(sizeof(SocketData), 0);
-						if(ctx == NULL){
-							close(infd);
-							continue;
+
+					if (done == 1)
+					{
+						printf ("Desconectado file descriptor: %d\n",
+								(((SocketData*)events[i].data.ptr)->fd));
+						close (((SocketData*)events[i].data.ptr)->fd);
+						if(events[i].data.ptr){
+							if(((SocketData*)events[i].data.ptr)->buf)
+								free(((SocketData*)events[i].data.ptr)->buf);
+							free(events[i].data.ptr);
+							events[i].data.ptr = NULL;
 						}
-						ctx->fd = infd;
-						ctx->bin = 1;
-						ctx->buf = NULL;
-						ctx->index = 0; 
-						ctx->size = 0; 
-						ctx->a_len = 2049; 
-						event.data.ptr = ctx;
-						s = epoll_ctl (epfd, EPOLL_CTL_ADD, infd, &event);
-						if (s == -1)
-						{
-							perror ("epoll_ctl");
-							abort ();
-						}
+					}else{
 						event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
 						event.data.ptr = eventData;
-						epoll_ctl(efd, EPOLL_CTL_MOD, eventData->fd, &event);
-					}else{
-						int done = 0;
-						if((eventData->bin) == 0){
-							done = handle_conn(eventData);
-						}else{
-							done = handle_conn_bin(eventData);
-						}
-
-
-						if (done == 1)
-						{
-							printf ("Desconectado file descriptor: %d\n",
-									(((SocketData*)events[i].data.ptr)->fd));
-							close (((SocketData*)events[i].data.ptr)->fd);
-							if(events[i].data.ptr){
-								if(((SocketData*)events[i].data.ptr)->buf)
-									free(((SocketData*)events[i].data.ptr)->buf);
-								free(events[i].data.ptr);
-								events[i].data.ptr = NULL;
-							}
-						}else{
-							event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
-							event.data.ptr = eventData;
-							epoll_ctl(epfd, EPOLL_CTL_MOD, eventData->fd, &event);
-						}
+						epoll_ctl(epfd, EPOLL_CTL_MOD, eventData->fd, &event);
 					}
+					
                 }
             }
     }
     return NULL;
 }
 
-
+//wait_for_clients: () -> ()
+// Funcion para levantar un thread por core con la funcion para recibir requests
 void wait_for_clients(){
     int number_of_processors = sysconf(_SC_NPROCESSORS_ONLN);
     pthread_t clientes[number_of_processors+1];
@@ -600,7 +624,8 @@ void wait_for_clients(){
     }
     return;
 }
-
+//mk_lsock: (int) -> (int)
+// Crea un socket con el puerto especificado y lo agrega al epoll, devuelve el file descriptor de este
 int mk_lsock(int port)
 {
 	struct sockaddr_in sa;
@@ -608,12 +633,10 @@ int mk_lsock(int port)
 	int rc;
 	int yes = 1;
 
-	/* Crear socket */
 	sock = socket(AF_INET, SOCK_STREAM, 0);
 	if (sock < 0)
 		quit("socket");
 
-	/* Setear opción reuseaddr... normalmente no es necesario */
 	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) == 1)
 		quit("setsockopt");
 
@@ -621,15 +644,12 @@ int mk_lsock(int port)
 	sa.sin_port = htons(port);
 	sa.sin_addr.s_addr = htonl(INADDR_ANY);
 
-	/* Bindear al puerto 4040 TCP, en todas las direcciones disponibles */
 	rc = bind(sock, (struct sockaddr *)&sa, sizeof sa);
 	if (rc < 0)
 		quit("bind");
 
-	/* Setear en modo escucha */
 	rc = listen(sock, 10);
   
-  /* creo instancia epoll y registro el sock */
   if(epfd == 0){
   	epfd = epoll_create(1); 
   }

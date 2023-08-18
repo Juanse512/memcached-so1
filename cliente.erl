@@ -12,6 +12,7 @@ compare_response(V) ->
         111 -> einval;
         112 -> enotfound;
         115 -> eunk;
+        116 -> emem;
         101 -> ok
     end.
 

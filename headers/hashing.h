@@ -11,19 +11,22 @@ unsigned int MurmurHash2 ( const void * key, int len, unsigned int seed );
 // Toma una palabra y devuelve su hash
 unsigned int hash_first(char * word);
 
-//hash_words: (char **, int, int*) -> (Word**)
-// Toma el diccionario y devuelve una tabla hash con las palabras que contiene
-// Toma el diccionario, un contador del tamaño de este y un puntero a int que indica el tamaño de la nueva tabla hash
-// Word ** hash_words(char * dictionary[], int counter, int * size);
-
+//hash_word: (char *, char *, int, int, int, int) -> (int)
+// Dados los argumentos de un nodo, crea uno nuevo y lo inserta en la tabla hash
+// Devuelve 1 si crea un nodo nuevo, 0 si reemplazo un valor y -1 si no hay mas memoria
 int hash_word(char * key, char * value,int counter, int keyLength, int valueLength, int mode);
 
 //find_word: (char *, char **, Word **, int, int) -> (int)
 // Busca una palabra en la tabla hash
-// Toma una palabra, el diccionario, la tabla hash, el tamaño de esta y un entero que indica la distancia de la palabra a la palabra original, este ultimo argumento 
-// es opcional, devuelve 1 si se encuentra, 0 si no
+// devuelve 1 si se encuentra, 0 si no
 Word * find_word(char * word, int len);
 
+//find_elem_to_delete: (char*, int) -> (int)
+// Elimina el nodo que tiene la key que la funcion toma como argumento
 int find_elem_to_delete(char * word, int len);
+
+// initialize_word: (char *, char *, int, int, int, unsigned int) -> (Word *)
+// Dados los argumentos necesarios, crea un nuevo nodo para insertar en la tabla hash
+Word * initialize_word(char * key, char * value, int keyLength, int valueLength, int mode, unsigned int firstHash);
 
 #endif
