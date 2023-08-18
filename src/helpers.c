@@ -12,9 +12,29 @@
 #include <sys/resource.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include "../headers/helpers.h"
 #include "../headers/io.h"
 #include "../headers/hashing.h"
-#include "../headers/helpers.h"
+
+int tableSize; // Tamaño de la tabla
+
+int lockSize; // Tamaño del array de locks
+
+int binlsock, lsock; // sockets binario y texto (889 y 888 respectivamente)
+
+int PUTS, DELS, GETS, KEYVALUES; // Valores de stats
+
+pthread_mutex_t putsLock, delsLock, getsLock, kvLock, firstElemLock, lastElemLock;
+// Locks de los valores de stats y de la cola de borrado
+
+Word * lastElemDelete; // Ultimo elemento de la cola de borrado, primero a eliminar
+
+Word * firstElemDelete; // Primer elemento de la cola, ultimo a eliminar
+
+Word ** hashTable; // Tabla hash
+
+
+
 //insert_word: (Word *, Word *) -> (Word*)
 // Toma el primer elemento de una lista y un nuevo nodo e inserta este al final de la cola
 Word * insert_word(Word * word, Word * newWord){

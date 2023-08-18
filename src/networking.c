@@ -32,14 +32,14 @@ enum code {
 
 int epfd = 0;
 
-typedef struct SocketDataS {
-    int fd; // file descriptor del socket
-    int bin; // flag para saber si es binario
-	char * buf; // buffer de entrada
-	int index; // indice en el buffer
-	int size; // bytes usados del buffer
-	int a_len; // tamaño total del buffer
-} SocketData;
+// typedef struct SocketDataS {
+//     int fd; // file descriptor del socket
+//     int bin; // flag para saber si es binario
+// 	char * buf; // buffer de entrada
+// 	int index; // indice en el buffer
+// 	int size; // bytes usados del buffer
+// 	int a_len; // tamaño total del buffer
+// } SocketData;
 
 
 int READ(int fd, char * buf, int n) {						\

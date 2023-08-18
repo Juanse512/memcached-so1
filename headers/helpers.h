@@ -28,15 +28,15 @@ typedef struct WordStruct{
 } Word;
 
 
-int tableSize; // Tamaño de la tabla
-int lockSize; // Tamaño del array de locks
-int binlsock, lsock; // sockets binario y texto (889 y 888 respectivamente)
-int PUTS, DELS, GETS, KEYVALUES; // Valores de stats
-pthread_mutex_t putsLock, delsLock, getsLock, kvLock, firstElemLock, lastElemLock;
+extern int tableSize; // Tamaño de la tabla
+extern int lockSize; // Tamaño del array de locks
+extern int binlsock, lsock; // sockets binario y texto (889 y 888 respectivamente)
+extern int PUTS, DELS, GETS, KEYVALUES; // Valores de stats
+extern pthread_mutex_t putsLock, delsLock, getsLock, kvLock, firstElemLock, lastElemLock;
 // Locks de los valores de stats y de la cola de borrado
-Word * lastElemDelete; // Ultimo elemento de la cola de borrado, primero a eliminar
-Word * firstElemDelete; // Primer elemento de la cola, ultimo a eliminar
-Word ** hashTable; // Tabla hash
+extern Word * lastElemDelete; // Ultimo elemento de la cola de borrado, primero a eliminar
+extern Word * firstElemDelete; // Primer elemento de la cola, ultimo a eliminar
+extern Word ** hashTable; // Tabla hash
 
 pthread_mutex_t * locks; // Array de locks, cada lock abarca varias columnas de la tabla hash
 
