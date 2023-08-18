@@ -33,6 +33,7 @@ Word * firstElemDelete; // Primer elemento de la cola, ultimo a eliminar
 
 Word ** hashTable; // Tabla hash
 
+pthread_mutex_t * locks; // Array de locks, cada lock abarca varias columnas de la tabla hash
 
 
 //insert_word: (Word *, Word *) -> (Word*)

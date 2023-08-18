@@ -38,7 +38,7 @@ extern Word * lastElemDelete; // Ultimo elemento de la cola de borrado, primero 
 extern Word * firstElemDelete; // Primer elemento de la cola, ultimo a eliminar
 extern Word ** hashTable; // Tabla hash
 
-pthread_mutex_t * locks; // Array de locks, cada lock abarca varias columnas de la tabla hash
+extern pthread_mutex_t * locks; // Array de locks, cada lock abarca varias columnas de la tabla hash
 
 //clean_array: (Word **, int) -> ()
 // Toma un array de punteros y los pone a NULL
