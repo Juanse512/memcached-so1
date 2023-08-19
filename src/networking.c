@@ -208,6 +208,7 @@ int text_consume(int fd, char ** buf_p, int * index, int * size, int * a_size){
 	}
 	int rc = 1;
 	int i = *size;
+
 	while ((rc = read(fd, buf + i, 1)) > 0) {
 		if (buf[i] == '\n'){
 			valid = 1;
@@ -222,6 +223,7 @@ int text_consume(int fd, char ** buf_p, int * index, int * size, int * a_size){
 	if(i == *size){
 		return 0;
 	}
+
 	buf[i] = '\0';
 	*size = i;
 	*buf_p = buf;
@@ -339,65 +341,72 @@ void input_handler(int csock, char ** tok){
 	char reply[MAX_RESPONSE];
 	int ok = 0;
 	if(strcmp(tok[0], "GET") == 0){
-		Word * result = find_word(tok[1], strlen(tok[1]));
-		if(result == NULL){
-			sprintf(reply, "ENOTFOUND\n");
-		}else{
-			if(result->bin){
-				sprintf(reply, "EBIN\n");
+		if(tok[1]){
+			Word * result = find_word(tok[1], strlen(tok[1]));
+			if(result == NULL){
+				sprintf(reply, "ENOTFOUND\n");
 			}else{
-				if(result->value.len + 4 > 2048){
-					sprintf(reply, "EBIG\n");
+				if(result->bin){
+					sprintf(reply, "EBIN\n");
 				}else{
-					sprintf(reply, "OK %s\n", result->value.string);
+					if(result->value.len + 4 > 2048){
+						sprintf(reply, "EBIG\n");
+					}else{
+						sprintf(reply, "OK %s\n", result->value.string);
+					}
 				}
 			}
+			pthread_mutex_lock(&getsLock);
+			GETS++;
+			pthread_mutex_unlock(&getsLock);
+			ok = 1;
 		}
-		pthread_mutex_lock(&getsLock);
-		GETS++;
-		pthread_mutex_unlock(&getsLock);
-		ok = 1;
 	}
 	if(strcmp(tok[0], "PUT") == 0){
-		int len = strlen(tok[1]);
-		int lenV = strlen(tok[2]);
-		char * key = robust_malloc(sizeof(char) * len, 0);
-		char * value = robust_malloc(sizeof(char) * lenV, 0);
-		if(!key || !value){
-			sprintf(reply, "EMEM\n");
-		}else{
-			memcpy(key, tok[1], len);
-			memcpy(value, tok[2], lenV);
-			int res = hash_word(key, value, tableSize, strlen(tok[1]), strlen(tok[2]), 0);
-			if(res == -1)
+		if(tok[1] && tok[2]){
+			int len = strlen(tok[1]);
+			int lenV = strlen(tok[2]);
+
+			char * key = robust_malloc(sizeof(char) * len, 0);
+			char * value = robust_malloc(sizeof(char) * lenV, 0);
+			if(!key || !value){
 				sprintf(reply, "EMEM\n");
-			else{
-				sprintf(reply, "OK\n");
-				pthread_mutex_lock(&putsLock);
-				PUTS++;
-				pthread_mutex_unlock(&putsLock);
-				pthread_mutex_lock(&kvLock);
-				KEYVALUES += res;
-				pthread_mutex_unlock(&kvLock);
+			}else{
+				memcpy(key, tok[1], len);
+				memcpy(value, tok[2], lenV);
+				int res = hash_word(key, value, tableSize, strlen(tok[1]), strlen(tok[2]), 0);
+				if(res == -1)
+					sprintf(reply, "EMEM\n");
+				else{
+					sprintf(reply, "OK\n");
+					pthread_mutex_lock(&putsLock);
+					PUTS++;
+					pthread_mutex_unlock(&putsLock);
+					pthread_mutex_lock(&kvLock);
+					KEYVALUES += res;
+					pthread_mutex_unlock(&kvLock);
+				}
 			}
+			ok = 1;
 		}
-		ok = 1;
 	}
 
 	if(strcmp(tok[0], "DEL") == 0){
-		int res = find_elem_to_delete(tok[1], strlen(tok[1]));
-		if(res){
-			sprintf(reply, "OK\n");
-		}else{
-			sprintf(reply, "ENOTFOUND\n");
+		if(tok[1]){
+			int res = find_elem_to_delete(tok[1], strlen(tok[1]));
+			if(res){
+				sprintf(reply, "OK\n");
+			}else{
+				sprintf(reply, "ENOTFOUND\n");
+			}
+			pthread_mutex_lock(&delsLock);
+			DELS++;
+			pthread_mutex_unlock(&delsLock);
+			pthread_mutex_lock(&kvLock);
+			KEYVALUES -= res;
+			pthread_mutex_unlock(&kvLock);
+			ok = 1;
 		}
-		pthread_mutex_lock(&delsLock);
-		DELS++;
-		pthread_mutex_unlock(&delsLock);
-		pthread_mutex_lock(&kvLock);
-		KEYVALUES -= res;
-		pthread_mutex_unlock(&kvLock);
-		ok = 1;
 	}
 
 	if(strcmp(tok[0], "STATS") == 0){
@@ -431,6 +440,7 @@ int handle_conn(SocketData * event)
 	int res_text;
 	while (1) {
 		res_text = text_consume(event->fd, &(event->buf), &(event->index), &(event->size), &(event->a_len));
+
 		switch (res_text){
 		case 0:
 			close(event->fd);
@@ -454,7 +464,7 @@ int handle_conn(SocketData * event)
 			write(event->fd, "EMEM\n", 5);
 			return 2;
 		}
-
+		
 		input_handler(event->fd, tokP);
 
 		for(int i = 0; i < 4; i++){

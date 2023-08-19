@@ -1,3 +1,5 @@
+- segfault modo texto PUT a
+asd
 - probar funciones individuales con valgrind 
 - revisar codigo
 - comentar
