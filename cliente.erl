@@ -1,5 +1,5 @@
 -module(cliente).
--export([start/2, get/2, del/2, stats/1, put/3, test/1]).
+-export([start/2, get/2, del/2, stats/1, put/3]).
 
 % generate_bin: Genera un binario con una cantidad N de ceros.
 generate_bin(3) -> <<0,0,0>>;
@@ -91,5 +91,3 @@ put(Sock,Key,Value) ->
                                 [Head | _] = List,
                                 compare_response(Head)
     end.
-
-

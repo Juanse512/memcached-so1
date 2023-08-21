@@ -245,6 +245,7 @@ int text_consume_bin(int fd, char ** buf_p, int * index, int * size, int * a_siz
 	}
 	int rc;
 	int i = *size;
+
 	while ((rc = read(fd, buf + i, 1)) > 0) {
 		i++;
 		if(i >= *a_size){
@@ -494,10 +495,12 @@ int handle_conn(SocketData * event)
 // Devuelve 1 si se cerro la conexion, 2 si no
 int handle_conn_bin(SocketData * event)
 {
+	
 	int res, res_text;
 	while (1) {
 
 		res_text = text_consume_bin(event->fd, &(event->buf), &(event->index), &(event->size), &(event->a_len));
+
 		if(res_text == 0){
 			close(event->fd);
 			return 1;
@@ -508,13 +511,11 @@ int handle_conn_bin(SocketData * event)
 			return 2;
 		}
 		res = parse_text_bin(event->fd, (event->buf), event->size, event->index);
-		
-		if(res <= 0){
-			if(res == -2){
-				int comm = EMEM;
-				write(event->fd, &comm, 1);
-			}
-
+		if(res == -2){
+			int comm = EMEM;
+			write(event->fd, &comm, 1);
+		}
+		if(res == 0 || res == -2){
 			if(event->buf)
 				free(event->buf);
 			
