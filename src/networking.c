@@ -102,7 +102,6 @@ void input_handler_bin(int csock, int mode, char* key, char* val, int keyLen, in
 	int ok = 0;
 	char comm;
 	
-
 	if(mode == PUT){
 		int res = hash_word(key, val, tableSize, keyLen, valLen, 1);
 		// Si devuelve -1 significa que no hay memoria disponible, devuelvo EMEM
@@ -341,6 +340,8 @@ int parse_text_bin(int fd, char * buf, int buf_size, int index){
 void input_handler(int csock, char ** tok){
 	char reply[MAX_RESPONSE];
 	int ok = 0;
+
+
 	if(strcmp(tok[0], "GET") == 0){
 		if(tok[1]){
 			Word * result = find_word(tok[1], strlen(tok[1]));
