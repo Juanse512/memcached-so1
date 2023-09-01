@@ -34,7 +34,7 @@ int epfd = 0;
 
 
 int READ(int fd, char * buf, int n) {						\
-	int rc = read(fd, buf, n);					\
+	int rc = readn(fd, buf, n);					\
 	if (rc < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))	\
 		return 0;						\
 	if (rc <= 0)							\
@@ -107,10 +107,10 @@ void input_handler_bin(int csock, int mode, char* key, char* val, int keyLen, in
 		// Si devuelve -1 significa que no hay memoria disponible, devuelvo EMEM
 		if(res == -1){
 			comm = EMEM;
-			write(csock, &comm, 1);
+			writen(csock, &comm, 1);
 		}else{
 			comm = OK;
-			write(csock, &comm, 1);
+			writen(csock, &comm, 1);
 			pthread_mutex_lock(&putsLock);
 			PUTS++;
 			pthread_mutex_unlock(&putsLock);
@@ -124,10 +124,10 @@ void input_handler_bin(int csock, int mode, char* key, char* val, int keyLen, in
 		int res = find_elem_to_delete(key, keyLen);
 		if(res){
 			comm = OK;
-			write(csock, &comm, 1);
+			writen(csock, &comm, 1);
 		}else{
 			comm = ENOTFOUND;
-			write(csock, &comm, 1);
+			writen(csock, &comm, 1);
 		}
 		pthread_mutex_lock(&delsLock);
 		DELS++;
@@ -142,14 +142,14 @@ void input_handler_bin(int csock, int mode, char* key, char* val, int keyLen, in
 		Word * result = find_word(key, keyLen);
 		if(result == NULL){
 			comm = ENOTFOUND;
-			write(csock, &comm, 1);
+			writen(csock, &comm, 1);
 		}else{
 			comm = OK;
 			int len = result->value.len;
 			int len_net = htonl(len);
-			write(csock, &comm, 1);
-			write(csock, &len_net, 4);
-			write(csock, result->value.string, len);
+			writen(csock, &comm, 1);
+			writen(csock, &len_net, 4);
+			writen(csock, result->value.string, len);
 		}
 		pthread_mutex_lock(&getsLock);
 		GETS++;
@@ -171,15 +171,15 @@ void input_handler_bin(int csock, int mode, char* key, char* val, int keyLen, in
 		comm = OK;
 		int len = strlen(reply);
 		int len_net = htonl(len);
-		write(csock, &comm, 1);
-		write(csock, &len_net, 4);
-		write(csock, reply, len);
+		writen(csock, &comm, 1);
+		writen(csock, &len_net, 4);
+		writen(csock, reply, len);
 		ok = 1;
 	}
 	
 	if(ok == 0){
 		comm = EINVAL;
-		write(csock, &comm, 1);
+		writen(csock, &comm, 1);
 	}
 	// Libero la key si no la guarde usando PUT
 	if(mode != PUT){
@@ -208,7 +208,7 @@ int text_consume(int fd, char ** buf_p, int * index, int * size, int * a_size){
 	int rc = 1;
 	int i = *size;
 
-	while ((rc = read(fd, buf + i, 1)) > 0) {
+	while ((rc = readn(fd, buf + i, 1)) > 0) {
 		if (buf[i] == '\n'){
 			valid = 1;
 			break;
@@ -245,7 +245,7 @@ int text_consume_bin(int fd, char ** buf_p, int * index, int * size, int * a_siz
 	int rc;
 	int i = *size;
 
-	while ((rc = read(fd, buf + i, 1)) > 0) {
+	while ((rc = readn(fd, buf + i, 1)) > 0) {
 		i++;
 		if(i >= *a_size){
 			*a_size = (*a_size) * 2;
@@ -341,7 +341,6 @@ void input_handler(int csock, char ** tok){
 	char reply[MAX_RESPONSE];
 	int ok = 0;
 
-
 	if(strcmp(tok[0], "GET") == 0){
 		if(tok[1]){
 			Word * result = find_word(tok[1], strlen(tok[1]));
@@ -428,7 +427,7 @@ void input_handler(int csock, char ** tok){
 	if(ok == 0){
 		sprintf(reply, "EINVAL\n");
 	}
-	write(csock, reply, strlen(reply));
+	writen(csock, reply, strlen(reply));
 	return;
 }
 
@@ -452,18 +451,18 @@ int handle_conn(SocketData * event)
 			return 2;
 			break;
 		case -2:
-			write(event->fd, "EBIG\n", 5);
+			writen(event->fd, "EBIG\n", 5);
 			return 2;
 			break;
 		case -3:
-			write(event->fd, "EMEM\n", 5);
+			writen(event->fd, "EMEM\n", 5);
 			return 2;
 			break;
 		}
 
 		char ** tokP = parser(event->buf);
 		if(tokP == NULL){
-			write(event->fd, "EMEM\n", 5);
+			writen(event->fd, "EMEM\n", 5);
 			return 2;
 		}
 		
@@ -508,13 +507,13 @@ int handle_conn_bin(SocketData * event)
 		}
 		if(res_text == -1){
 			int comm = EMEM;
-			write(event->fd, &comm, 1);
+			writen(event->fd, &comm, 1);
 			return 2;
 		}
 		res = parse_text_bin(event->fd, (event->buf), event->size, event->index);
 		if(res == -2){
 			int comm = EMEM;
-			write(event->fd, &comm, 1);
+			writen(event->fd, &comm, 1);
 		}
 		if(res == 0 || res == -2){
 			if(event->buf)

@@ -23,7 +23,7 @@
  * testear una situación más real de una red cargada, y/o una red un
  * poco adversarial.
  */
-#define RUIDO 0
+#define RUIDO 1
 
 #if RUIDO
 static inline int min(int x, int y) { return x < y ? x : y; }
