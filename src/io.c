@@ -11,34 +11,37 @@ void quit(const char *s)
 	perror(s);
 	exit(1);
 }
-
+//readn: (int, void *, size_t) -> (ssize_t)
+// Read confiable en caso de que en el primer read no se lea toda la cantidad requerida
 ssize_t readn(int fd, void *buffer, size_t n){
-	ssize_t numRead; /* # of bytes fetched by last read() */
-	size_t totRead;	 /* Total # of bytes read so far */
+	ssize_t numRead; 
+	size_t totRead;	 
 	char *buf;
-	buf = buffer; /* No pointer arithmetic on "void *" */
+	buf = buffer; 
 	for (totRead = 0; totRead < n;)
 	{
 		numRead = read(fd, buf, n - totRead);
-		if (numRead == 0)	/* EOF */
-			return totRead; /* May be 0 if this is first read() */
+		if (numRead == 0)	
+			return totRead; 
 		if (numRead == -1)
 		{
 			if (errno == EINTR)
-				continue; /* Interrupted --> restart read() */
+				continue; 
 			else
-				return -1; /* Some other error */
+				return -1; 
 		}
 		totRead += numRead;
 		buf += numRead;
 	}
 	return totRead; /* Must be 'n' bytes if we get here */
 }
+//writen: (int, void *, size_t) -> (ssize_t)
+// Write confiable en caso de que en el primer write no se escriba toda la cantidad requerida
 ssize_t writen(int fd, const void *buffer, size_t n){
-	ssize_t numWritten; /* # of bytes written by last writen() */
-	size_t totWritten;	/* Total # of bytes written so far */
+	ssize_t numWritten; 
+	size_t totWritten;	
 	const char *buf;
-	buf = buffer; /* No pointer arithmetic on "void *" */
+	buf = buffer; 
 
 	for (totWritten = 0; totWritten < n;)
 	{
@@ -46,12 +49,12 @@ ssize_t writen(int fd, const void *buffer, size_t n){
 		if (numWritten <= 0)
 		{
 			if (numWritten == -1 && errno == EINTR)
-				continue; /* Interrupted --> restart writen() */
+				continue; 
 			else
-				return -1; /* Some other error */
+				return -1;
 		}
 		totWritten += numWritten;
 		buf += numWritten;
 	}
-	return totWritten; /* Must be 'n' bytes if we get here */
+	return totWritten;
 }

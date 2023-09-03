@@ -222,7 +222,8 @@ int text_consume(int fd, char ** buf_p, int * index, int * size, int * a_size){
 	if(i == *size){
 		return 0;
 	}
-
+	if(rc == -1)
+		return -4;
 	buf[i] = '\0';
 	*size = i;
 	*buf_p = buf;
@@ -255,9 +256,11 @@ int text_consume_bin(int fd, char ** buf_p, int * index, int * size, int * a_siz
 				break;
 		}
 	}
-	if(i == *size){
+	if(rc == -1)
+		return -2;
+	if(i == *size)
 		return 0;
-	}
+	
 	*size = i;
 	*buf_p = buf;
 	return 1;
@@ -458,6 +461,10 @@ int handle_conn(SocketData * event)
 			writen(event->fd, "EMEM\n", 5);
 			return 2;
 			break;
+		case -4:
+			writen(event->fd, "EUNK\n", 5);
+			return 2;
+			break;
 		}
 
 		char ** tokP = parser(event->buf);
@@ -507,6 +514,11 @@ int handle_conn_bin(SocketData * event)
 		}
 		if(res_text == -1){
 			int comm = EMEM;
+			writen(event->fd, &comm, 1);
+			return 2;
+		}
+		if(res_text == -2){
+			int comm = EUNK;
 			writen(event->fd, &comm, 1);
 			return 2;
 		}
