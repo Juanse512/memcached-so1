@@ -52,6 +52,7 @@ ssize_t writen(int fd, const void *buffer, size_t n){
 				continue; 
 			else
 				return -1;
+			
 		}
 		totWritten += numWritten;
 		buf += numWritten;

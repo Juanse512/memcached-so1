@@ -222,8 +222,6 @@ int text_consume(int fd, char ** buf_p, int * index, int * size, int * a_size){
 	if(i == *size){
 		return 0;
 	}
-	if(rc == -1)
-		return -4;
 	buf[i] = '\0';
 	*size = i;
 	*buf_p = buf;
@@ -256,8 +254,6 @@ int text_consume_bin(int fd, char ** buf_p, int * index, int * size, int * a_siz
 				break;
 		}
 	}
-	if(rc == -1)
-		return -2;
 	if(i == *size)
 		return 0;
 	
