@@ -105,6 +105,7 @@ void input_handler_bin(int csock, int mode, char* key, char* val, int keyLen, in
 	if(mode == PUT){
 		int res = hash_word(key, val, tableSize, keyLen, valLen, 1);
 		// Si devuelve -1 significa que no hay memoria disponible, devuelvo EMEM
+
 		if(res == -1){
 			comm = EMEM;
 			writen(csock, &comm, 1);
@@ -154,6 +155,7 @@ void input_handler_bin(int csock, int mode, char* key, char* val, int keyLen, in
 		pthread_mutex_lock(&getsLock);
 		GETS++;
 		pthread_mutex_unlock(&getsLock);
+
 		ok = 1;
 	}
 	if(mode == STATS){
@@ -167,7 +169,10 @@ void input_handler_bin(int csock, int mode, char* key, char* val, int keyLen, in
 		pthread_mutex_lock(&kvLock);
 		int kv = KEYVALUES;
 		pthread_mutex_unlock(&kvLock);
-		sprintf(reply, "PUTS:%d GETS: %d KEYVALUES: %d", puts, gets, kv);
+		pthread_mutex_lock(&delsLock);
+		int dels = DELS;
+		pthread_mutex_unlock(&delsLock);
+		sprintf(reply, "PUTS=%d GETS=%d KEYVALUES=%d DELS=%d\n", puts, gets, kv, dels);
 		comm = OK;
 		int len = strlen(reply);
 		int len_net = htonl(len);
@@ -228,6 +233,52 @@ int text_consume(int fd, char ** buf_p, int * index, int * size, int * a_size){
 	
 	return valid;
 }
+
+int read_code(int fd, char ** buf_p, int * i){
+	char * buf = *buf_p;
+	int rc = read(fd, buf, 1);
+	(*i) += rc;
+	if(rc < 0)
+		return 0;
+	return 1;
+}
+int read_v_size(int fd, char ** buf_p, int * i){
+		char * buf = *buf_p;
+		int rc;
+		rc = read(fd, buf + (*i), 4);
+		if(rc < 4){
+			return -1;
+		}
+		char klen[4];
+		memcpy(klen, buf+(*i), 4);
+		(*i) += rc;
+		int len = ntohl(*(int*)klen);
+		return len;
+}
+
+int read_key(int fd, char ** buf_p, int * i, int len, int *a_size){
+	int rc;
+	char * buf = *buf_p;
+
+	if(len + (*i) >= (*a_size)){
+		*a_size = 2 * (*a_size);
+		char * buf2 = robust_malloc(sizeof(char) * (*a_size), 0);
+		if(buf2 == NULL)
+			return -2;
+		memcpy(buf2, buf, (*i));
+		free(buf);
+		buf = buf2;
+		*buf_p = buf;
+	}
+	
+	rc = read(fd, buf + (*i), len);
+	(*i) += rc;
+	if(rc < len){
+		return 0;
+	}
+	return 1;
+}
+
 //text_consume_bin: (int, char **, int *, int *, int *) -> (int)
 // Consume el buffer del file descriptor en modo binario
 // Devuelve -1 si no hay memoria disponible, 0 si no hay nada que leer y 1 si todo salio correctamente
@@ -243,23 +294,104 @@ int text_consume_bin(int fd, char ** buf_p, int * index, int * size, int * a_siz
 	}
 	int rc;
 	int i = *size;
-
-	while ((rc = readn(fd, buf + i, 1)) > 0) {
-		i++;
-		if(i >= *a_size){
-			*a_size = (*a_size) * 2;
-			*buf_p = realloc(*buf_p, (*a_size));
-			buf = *buf_p;
-			if(buf == NULL)
-				break;
+	// printf("index %d\n", *index);
+	if(*index == 0){
+		rc = read_code(fd, &buf, &i);
+		if(rc == 0) return 0;
+		*index = 1;
+		if(buf[0] == STATS){
+			*index = 0;
+			*size = i;
+			*buf_p = buf;
+			return 3;
 		}
+		
+		int len = read_v_size(fd, &buf, &i);
+		if(len == -1){
+			*size = i;
+			*buf_p = buf;
+			return 0;
+		}
+		*index = 2;
+		rc = read_key(fd, &buf, &i, len, a_size);
+		if(rc == 0){
+			*size = i;
+			*buf_p = buf;
+			return 1;
+		}
+		
+		if(buf[0]== PUT){
+			*index = 3;
+			int vlen = read_v_size(fd, &buf, &i);
+			if(vlen == -1){
+				*size = i;
+				*buf_p = buf;
+				return 0;
+			}
+
+			*index = 4;
+			rc = read_key(fd, &buf, &i, vlen, a_size);
+			if(rc == 0){
+				*size = i;
+				*buf_p = buf;
+				return 1;
+			}
+			if(rc == -2){
+				*size = i;
+				*buf_p = buf;
+				return -1;
+			}
+
+		}
+	}else{
+		int len;
+		if(*index <= 1){
+			rc = read_code(fd, &buf, &i);
+			if(rc == 0) return 0;
+			*index = 1;
+		}
+		if(*index <= 2){
+			rc = read_key(fd, &buf, &i, len, a_size);
+			if(rc == 0){
+				*size = i;
+				*buf_p = buf;
+				return 1;
+			}
+			if(rc == -2){
+				*size = i;
+				*buf_p = buf;
+				return -1;
+			}
+			*index = 2;
+		}
+		if(buf[0]== PUT){
+			int vlen;
+			if(*index <= 3){
+				vlen = read_v_size(fd, &buf, &i);
+				if(vlen == -1){
+					*size = i;
+					*buf_p = buf;
+					return 0;
+				}
+				*index = 4;
+			}
+			if(*index <= 4){
+				rc = read_key(fd, &buf, &i, vlen, a_size);
+				if(rc == 0){
+					*size = i;
+					*buf_p = buf;
+					return 1;
+				}
+			}
+		}
+
+
 	}
-	if(i == *size)
-		return 0;
-	
+
+	*index = 0;
 	*size = i;
 	*buf_p = buf;
-	return 1;
+	return 3;
 }
 
 //parse_text_bin: (int, char *, int, int) -> (int)
@@ -267,11 +399,14 @@ int text_consume_bin(int fd, char ** buf_p, int * index, int * size, int * a_siz
 // para llevar a cabo la orden
 // Devuelve 0 si consumi todo el buffer, -1 si faltan datos, -2 si no tengo memoria disponible
 int parse_text_bin(int fd, char * buf, int buf_size, int index){
+	// printf("b %d %p", buf_size, buf);
+	if(buf){
 	// Si llegue al final del buffer devuelvo 0
 	if(index >= buf_size)
 		return 0;
 	
 	if(buf_size == 1 && buf[0] == STATS){
+		buf[0] = 0;
 		input_handler_bin(fd, STATS, NULL, NULL, 0, 0);
 		return parse_text_bin(fd, buf, buf_size, index + 1);
 	}
@@ -281,13 +416,13 @@ int parse_text_bin(int fd, char * buf, int buf_size, int index){
 		return -1;
 	
 	
+	
 	int mode = buf[index];
 	char * key = NULL;
 	char * value = NULL;
 
 	int size = ((int)buf[index+1] * pow(256,3)) + ((int)buf[index+2] * pow(256,2)) + ((int)buf[index+3] * pow(256,1)) + ((int)buf[index+4]);
 	int vSize = 0;
-
 	// Si tengo menos bytes de los que indica el size entonces faltan datos
 	if((buf_size-5-index) < size)
 		return -1;
@@ -295,7 +430,6 @@ int parse_text_bin(int fd, char * buf, int buf_size, int index){
 	// Si tengo menos bytes de los que indica el size y ademas esta en modo put y no tengo el tamaño del value entonces faltan datos
 	if(mode == PUT && (size + 9) > buf_size)
 		return -1;
-
 
 	key = robust_malloc(sizeof(char)*(size+1), 0);
 
@@ -331,6 +465,8 @@ int parse_text_bin(int fd, char * buf, int buf_size, int index){
 	input_handler_bin(fd, mode, key, value, size, vSize);
 	// Itero de nuevo para consumir el resto del buffer
 	return parse_text_bin(fd, buf, buf_size, index);
+	}else
+		return -2;
 }
 
 //input_handler: (int, char**) -> ()
@@ -419,7 +555,10 @@ void input_handler(int csock, char ** tok){
 		pthread_mutex_lock(&kvLock);
 		int kv = KEYVALUES;
 		pthread_mutex_unlock(&kvLock);
-		sprintf(reply, "OK PUTS:%d GETS: %d KEYVALUES: %d\n", puts, gets, kv);
+		pthread_mutex_lock(&delsLock);
+		int dels = DELS;
+		pthread_mutex_unlock(&delsLock);
+		sprintf(reply, "PUTS=%d GETS=%d KEYVALUES=%d DELS=%d\n", puts, gets, kv, dels);
 
 		ok = 1;
 	}
@@ -439,6 +578,7 @@ int handle_conn(SocketData * event)
 {
 	int res_text;
 	while (1) {
+
 		res_text = text_consume(event->fd, &(event->buf), &(event->index), &(event->size), &(event->a_len));
 
 		switch (res_text){
@@ -455,11 +595,8 @@ int handle_conn(SocketData * event)
 			break;
 		case -3:
 			writen(event->fd, "EMEM\n", 5);
-			return 2;
-			break;
-		case -4:
-			writen(event->fd, "EUNK\n", 5);
-			return 2;
+			close(event->fd);
+			return 1;
 			break;
 		}
 
@@ -496,41 +633,55 @@ int handle_conn(SocketData * event)
 // Handler de la conexion del modo binario, se encarga de llamar a las funciones para parsear y ejecutar un comando
 // y dependiendo del resultado modifica o no el buffer correspondiente a ese file descriptor
 // Devuelve 1 si se cerro la conexion, 2 si no
+
+void empty_buffer(int fd){
+	char c;
+	while ((readn(fd, &c, 1)) > 0);
+}
+
+
 int handle_conn_bin(SocketData * event)
 {
 	
 	int res, res_text;
 	while (1) {
-
 		res_text = text_consume_bin(event->fd, &(event->buf), &(event->index), &(event->size), &(event->a_len));
-
+		// printf("res_text %d\n", res_text);
 		if(res_text == 0){
-			close(event->fd);
+			// close(event->fd);
 			return 1;
 		}
 		if(res_text == -1){
+			// printf("emptying buffer\n");
+			// empty_buffer(event->fd);
 			int comm = EMEM;
 			writen(event->fd, &comm, 1);
-			return 2;
+			return 1;
 		}
-		if(res_text == -2){
-			int comm = EUNK;
-			writen(event->fd, &comm, 1);
-			return 2;
-		}
-		res = parse_text_bin(event->fd, (event->buf), event->size, event->index);
-		if(res == -2){
-			int comm = EMEM;
-			writen(event->fd, &comm, 1);
-		}
-		if(res == 0 || res == -2){
-			if(event->buf)
-				free(event->buf);
-			
-			event->buf = NULL;
-			event->a_len = 0;
-			event->index = 0;
-			event->size = 0;
+		if(res_text == 3){
+			res = parse_text_bin(event->fd, (event->buf), event->size, 0);
+			// printf("res %d\n", res);
+			if(res == -2){
+				if(event->buf)
+					free(event->buf);
+				
+				event->buf = NULL;
+				event->a_len = 0;
+				event->index = 0;
+				event->size = 0;
+				int comm = EMEM;
+				writen(event->fd, &comm, 1);
+				return 2;
+			}
+			if(res == 0 || res == -2){
+				// if(event->buf)
+				// 	free(event->buf);
+				
+				// event->buf = NULL;
+				// event->a_len = 0;
+				event->index = 0;
+				event->size = 0;
+			}
 		}
 		return 2;
 	}
@@ -584,9 +735,6 @@ void * thread_f(void * arg){
 					perror ("epoll_ctl");
 					abort ();
 				}
-				
-				event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
-				event.data.ptr = eventData;
 				epoll_ctl(efd, EPOLL_CTL_MOD, eventData->fd, &event);
                 
 			}else{

@@ -5,8 +5,8 @@
 #define SEED_HASH 13
 #define MAX_RESPONSE 2048
 // Modificar estos dos valores para limitar la memoria 
-#define MAX_MEMORY_CUR 2 * 1024 * 1024 * 8
-#define MAX_MEMORY_MAX 4 * 1024 * 1024 * 8
+#define MAX_MEMORY_CUR 2 * 1024 * 1024 * 32
+#define MAX_MEMORY_MAX 4 * 1024 * 1024 * 32
 // Este valor limita el tamaño que puede tomar la tabla hash, no la memoria total
 #define MAX_FREE_RAM 100000
 #define MAX_EVENTS 10 // Maximos eventos del epoll

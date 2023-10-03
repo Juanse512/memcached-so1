@@ -1,5 +1,5 @@
 -module(cliente).
--export([start/2, get/2, del/2, stats/1, put/3]).
+-export([start/2, get/2, del/2, stats/1, put/3, test/1, test2/1]).
 
 % generate_bin: Genera un binario con una cantidad N de ceros.
 generate_bin(3) -> <<0,0,0>>;
@@ -90,4 +90,19 @@ put(Sock,Key,Value) ->
         {tcp, Sock, Paquete} -> List = binary_to_list(Paquete),
                                 [Head | _] = List,
                                 compare_response(Head)
+        after 1 -> timeout
     end.
+
+test(N) -> 
+    Sock = start("localhost", 889),
+    testAux(Sock, N).
+testAux(_, 0) -> [];
+testAux(Sock, N) -> R = put(Sock, integer_to_list(N), integer_to_list(N)),
+                    [R] ++ testAux(Sock, N-1).
+
+test2(N) -> 
+    Sock = start("localhost", 889),
+    testAux2(Sock, N).
+testAux2(_, 0) -> [];
+testAux2(Sock, N) -> R = del(Sock, integer_to_list(N)),
+                     [R] ++ testAux2(Sock, N-1).

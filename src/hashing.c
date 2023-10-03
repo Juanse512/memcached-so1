@@ -90,7 +90,7 @@ Word * find_word(char * word, int len){
                     
                     pthread_mutex_lock(&lastElemLock);
                     // Si el elemento encontrado es el tope de la lista, lo reemplazo por el siguiente elemento a eliminar
-                    if(returnValue == lastElemDelete)
+                    if(returnValue == lastElemDelete && returnValue->prev_delete)
                         lastElemDelete = returnValue->prev_delete;
                     pthread_mutex_unlock(&lastElemLock);
 

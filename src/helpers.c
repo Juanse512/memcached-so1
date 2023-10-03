@@ -198,7 +198,7 @@ void delete_element(Word * actual, unsigned int hash){
 
     pthread_mutex_lock(&lastElemLock);
     // Si el elemento es el ultimo de la cola de borrado, actualizamos esta con el siguiente nodo a borrar
-    if(actual == lastElemDelete)
+    if(actual == lastElemDelete) //&& prev_delete 
         lastElemDelete = prev_delete;
     
     pthread_mutex_unlock(&lastElemLock);
@@ -206,8 +206,12 @@ void delete_element(Word * actual, unsigned int hash){
     pthread_mutex_lock(&firstElemLock);
     // Si el elemento es el primero de la cola de borrado, actualizamos esta con el siguiente nodo
     if(actual == firstElemDelete){
-        firstElemDelete = actual->next_delete;
-        firstElemDelete->prev_delete = NULL;
+        if(actual == actual->next_delete)
+            firstElemDelete = NULL;
+        else{
+            firstElemDelete = actual->next_delete;
+            firstElemDelete->prev_delete = NULL;
+        }
     }
     pthread_mutex_unlock(&firstElemLock);
 
@@ -243,6 +247,7 @@ int compare_string(CompString s1, CompString s2){
 // Se encarga de eliminar un elemento de la cola de borrado cuando no hay memoria disponible
 // Devuelve 1 si elimino correctamente, -1 si no
 int free_memory(){
+    // printf("FREEING MEMORY\n");
     pthread_mutex_lock(&lastElemLock);
     
     // Si no hay elementos en la cola no hay mas memoria
@@ -298,7 +303,10 @@ int free_memory(){
     if(elem_to_delete == lastElemDelete)
         lastElemDelete = aux;
 
-
+    pthread_mutex_lock(&firstElemLock);
+        if(elem_to_delete == firstElemDelete)
+            firstElemDelete = NULL;
+    pthread_mutex_unlock(&firstElemLock);
     free(elem_to_delete->word.string);
     free(elem_to_delete->value.string);
     free(elem_to_delete);
@@ -324,8 +332,10 @@ void * robust_malloc(size_t size, int init){
     int res = 1;
     while(pointer == NULL){
         res = free_memory();
-        if(res == -1)
+        if(res == -1){
+            // exit(1);
             break;
+        }
         pointer = malloc(size);
     }
     if(pointer == NULL && init){
@@ -335,16 +345,23 @@ void * robust_malloc(size_t size, int init){
     return pointer;
 }
 
+
 //set_firstElem: (Word *) -> ()
 // Toma un nodo y lo coloca como ultimo elemento a borrar en la cola de borrado
 void set_firstElem(Word * element){
     pthread_mutex_lock(&firstElemLock);
-    if(firstElemDelete){
-        firstElemDelete->prev_delete = element;
-    }
-    element->next_delete = firstElemDelete;
-    element->prev_delete = NULL;
-    firstElemDelete = element;
+    if(element){
+        // printf("el %p\n", element->next_delete);
+        if(firstElemDelete){
+            // printf("FED1 %p\n", firstElemDelete);
+            // printf("FED %p\n", firstElemDelete->prev_delete);
+            firstElemDelete->prev_delete = element;
+        }
+        element->next_delete = firstElemDelete;
+        element->prev_delete = NULL;
+        firstElemDelete = element;
+    }else
+        firstElemDelete = NULL;
     pthread_mutex_unlock(&firstElemLock);
     return;
 }
