@@ -305,12 +305,19 @@ int text_consume_bin(int fd, char ** buf_p, int * index, int * size, int * a_siz
 			*buf_p = buf;
 			return 3;
 		}
-		
+		if(buf[0] != GET && buf[0] != PUT && buf[0] != DEL){
+			*index = 0;
+			*size = i;
+			*buf_p = buf;
+			int comm = EINVAL;
+			writen(fd, &comm, 1);
+			return -2;
+		}
 		int len = read_v_size(fd, &buf, &i);
 		if(len == -1){
 			*size = i;
 			*buf_p = buf;
-			return 0;
+			return 1;
 		}
 		*index = 2;
 		rc = read_key(fd, &buf, &i, len, a_size);
@@ -643,24 +650,28 @@ void empty_buffer(int fd){
 int handle_conn_bin(SocketData * event)
 {
 	
-	int res, res_text;
+	int res, res_text, comm;
 	while (1) {
 		res_text = text_consume_bin(event->fd, &(event->buf), &(event->index), &(event->size), &(event->a_len));
 		// printf("res_text %d\n", res_text);
-		if(res_text == 0){
-			// close(event->fd);
+		switch (res_text)
+		{
+		case 0:
 			return 1;
-		}
-		if(res_text == -1){
-			// printf("emptying buffer\n");
-			// empty_buffer(event->fd);
-			int comm = EMEM;
+			break;
+		case -1:
+			comm = EMEM;
 			writen(event->fd, &comm, 1);
 			return 1;
-		}
-		if(res_text == 3){
+			break;
+		case -2:
+			event->index = 0;
+			event->size = 0;
+			break;
+		case 3:
 			res = parse_text_bin(event->fd, (event->buf), event->size, 0);
 			// printf("res %d\n", res);
+			
 			if(res == -2){
 				if(event->buf)
 					free(event->buf);
@@ -669,20 +680,58 @@ int handle_conn_bin(SocketData * event)
 				event->a_len = 0;
 				event->index = 0;
 				event->size = 0;
-				int comm = EMEM;
+				comm = EMEM;
 				writen(event->fd, &comm, 1);
 				return 2;
 			}
 			if(res == 0 || res == -2){
-				// if(event->buf)
-				// 	free(event->buf);
-				
-				// event->buf = NULL;
-				// event->a_len = 0;
 				event->index = 0;
 				event->size = 0;
 			}
+			break;
+		default:
+			break;
 		}
+		// if(res_text == 0){
+		// 	// close(event->fd);
+		// 	return 1;
+		// }
+		// if(res_text == -1){
+		// 	// printf("emptying buffer\n");
+		// 	// empty_buffer(event->fd);
+		// 	int comm = EMEM;
+		// 	writen(event->fd, &comm, 1);
+		// 	return 1;
+		// }
+		// if(res_text == -2){
+		// 	event->index = 0;
+		// 	event->size = 0;
+		// }
+		// if(res_text == 3){
+		// 	res = parse_text_bin(event->fd, (event->buf), event->size, 0);
+		// 	// printf("res %d\n", res);
+		// 	if(res == -2){
+		// 		if(event->buf)
+		// 			free(event->buf);
+				
+		// 		event->buf = NULL;
+		// 		event->a_len = 0;
+		// 		event->index = 0;
+		// 		event->size = 0;
+		// 		int comm = EMEM;
+		// 		writen(event->fd, &comm, 1);
+		// 		return 2;
+		// 	}
+		// 	if(res == 0 || res == -2){
+		// 		// if(event->buf)
+		// 		// 	free(event->buf);
+				
+		// 		// event->buf = NULL;
+		// 		// event->a_len = 0;
+		// 		event->index = 0;
+		// 		event->size = 0;
+		// 	}
+		// }
 		return 2;
 	}
 }

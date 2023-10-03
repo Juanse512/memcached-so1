@@ -171,38 +171,37 @@ pthread_mutex_t* get_lock(unsigned int position){
 // Dado un elemento y su hash borra el elemento y conecta los nodos relacionados
 void delete_element(Word * actual, unsigned int hash){
     
+
     // Si el nodo es el primer elemento de la lista, actualiza el puntero de esta
     if(hashTable[hash % tableSize] == actual)
         hashTable[hash % tableSize] = actual->next;
-
     Word * next_delete = actual->next_delete;
     Word * prev_delete = actual->prev_delete;
-    pthread_mutex_t* prevL = NULL;
-    pthread_mutex_t* nextL = NULL;
+    // pthread_mutex_t* prevL = NULL;
+    // pthread_mutex_t* nextL = NULL;
     // Actualizamos los valores de la cola de borrado
+    pthread_mutex_lock(&lastElemLock);
     if(prev_delete){
-        unsigned int pos = prev_delete->hash % tableSize;
-        prevL = get_lock(pos);
-        pthread_mutex_lock(prevL);
+        // unsigned int pos = prev_delete->hash % tableSize;
+        // prevL = get_lock(pos);
+        // pthread_mutex_lock(prevL);
         prev_delete->next_delete = next_delete;
-        pthread_mutex_unlock(prevL);
+        // pthread_mutex_unlock(prevL);
     }
     
     if(next_delete){
-        unsigned int pos = next_delete->hash % tableSize;
-        nextL = get_lock(pos);
-        pthread_mutex_lock(nextL);
+        // unsigned int pos = next_delete->hash % tableSize;
+        // nextL = get_lock(pos);
+        // pthread_mutex_lock(nextL);
         next_delete->prev_delete = prev_delete;
-        pthread_mutex_unlock(nextL);
+        // pthread_mutex_unlock(nextL);
     }
-
-    pthread_mutex_lock(&lastElemLock);
+    // pthread_mutex_lock(&lastElemLock);
     // Si el elemento es el ultimo de la cola de borrado, actualizamos esta con el siguiente nodo a borrar
     if(actual == lastElemDelete) //&& prev_delete 
         lastElemDelete = prev_delete;
     
     pthread_mutex_unlock(&lastElemLock);
-
     pthread_mutex_lock(&firstElemLock);
     // Si el elemento es el primero de la cola de borrado, actualizamos esta con el siguiente nodo
     if(actual == firstElemDelete){
@@ -210,7 +209,8 @@ void delete_element(Word * actual, unsigned int hash){
             firstElemDelete = NULL;
         else{
             firstElemDelete = actual->next_delete;
-            firstElemDelete->prev_delete = NULL;
+            if(firstElemDelete)
+                firstElemDelete->prev_delete = NULL;
         }
     }
     pthread_mutex_unlock(&firstElemLock);
@@ -219,6 +219,7 @@ void delete_element(Word * actual, unsigned int hash){
         actual->prev->next = actual->next;
     if(actual->next)
         actual->next->prev = actual->prev;
+
 
     free(actual->word.string);
     free(actual->value.string);
