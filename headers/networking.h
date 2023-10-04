@@ -2,6 +2,15 @@
 #define __NETWORKING_IO_H_
 #include <stdint.h>
 
+
+typedef struct BinaryStruct{
+  int mode;
+  int keySize;
+  char * key;
+  int valueSize;
+  char * value;
+  int ind;
+} Binary;
 typedef struct SocketDataS {
     int fd; // file descriptor del socket
     int bin; // flag para saber si es binario
@@ -9,6 +18,7 @@ typedef struct SocketDataS {
 	int index; // indice en el buffer
 	int size; // bytes usados del buffer
 	int a_len; // tamaño total del buffer
+	Binary * binary; 
 } SocketData;
 
 int READ(int fd, char * buf, int n);
@@ -39,13 +49,7 @@ int text_consume(int fd, char ** buf_p, int * index, int * size, int * a_size);
 //text_consume_bin: (int, char **, int *, int *, int *) -> (int)
 // Consume el buffer del file descriptor en modo binario
 // Devuelve -1 si no hay memoria disponible, 0 si no hay nada que leer y 1 si todo salio correctamente
-int text_consume_bin(int fd, char ** buf_p, int * index, int * size, int * a_size);
-
-//parse_text_bin: (int, char *, int, int) -> (int)
-// Parser de un buffer en protocolo binario, toma un conjunto de bits, lo separa en argumentos y llama a las funciones
-// para llevar a cabo la orden
-// Devuelve 0 si consumi todo el buffer, -1 si faltan datos, -2 si no tengo memoria disponible
-int parse_text_bin(int fd, char * buf, int buf_size, int index);
+int text_consume_bin(int fd, char ** buf_p, int * index, int * size, int * a_size, Binary * binary);
 
 //input_handler: (int, char**) -> ()
 // Handler de input del modo texto, dado los argumentos necesarios para hacer una request, llama a las funciones necesarias

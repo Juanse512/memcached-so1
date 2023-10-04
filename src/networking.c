@@ -11,7 +11,7 @@
 #include <pthread.h>
 #include <sys/syscall.h>
 #include <math.h>
-
+#include <errno.h>
 #include "../headers/helpers.h"
 #include "../headers/hashing.h"
 #include "../headers/io.h"
@@ -101,7 +101,6 @@ void input_handler_bin(int csock, int mode, char* key, char* val, int keyLen, in
 	char reply[MAX_RESPONSE];
 	int ok = 0;
 	char comm;
-	
 	if(mode == PUT){
 		int res = hash_word(key, val, tableSize, keyLen, valLen, 1);
 		// Si devuelve -1 significa que no hay memoria disponible, devuelvo EMEM
@@ -141,6 +140,7 @@ void input_handler_bin(int csock, int mode, char* key, char* val, int keyLen, in
 
 	if(mode == GET){
 		Word * result = find_word(key, keyLen);
+
 		if(result == NULL){
 			comm = ENOTFOUND;
 			writen(csock, &comm, 1);
@@ -148,6 +148,7 @@ void input_handler_bin(int csock, int mode, char* key, char* val, int keyLen, in
 			comm = OK;
 			int len = result->value.len;
 			int len_net = htonl(len);
+			printf("%d %d %s\n", comm, len, result->value.string);
 			writen(csock, &comm, 1);
 			writen(csock, &len_net, 4);
 			writen(csock, result->value.string, len);
@@ -234,45 +235,41 @@ int text_consume(int fd, char ** buf_p, int * index, int * size, int * a_size){
 	return valid;
 }
 
-int read_code(int fd, char ** buf_p, int * i){
-	char * buf = *buf_p;
-	int rc = read(fd, buf, 1);
-	(*i) += rc;
+int read_code(int fd){
+	char c;
+	int rc = read(fd, &c, 1);
 	if(rc < 0)
 		return 0;
-	return 1;
+	return (int)c;
 }
-int read_v_size(int fd, char ** buf_p, int * i){
-		char * buf = *buf_p;
+int read_v_size(int fd){
+		char klen[4];
+
 		int rc;
-		rc = read(fd, buf + (*i), 4);
+		rc = read(fd, klen, 4);
 		if(rc < 4){
 			return -1;
 		}
-		char klen[4];
-		memcpy(klen, buf+(*i), 4);
-		(*i) += rc;
 		int len = ntohl(*(int*)klen);
 		return len;
 }
 
-int read_key(int fd, char ** buf_p, int * i, int len, int *a_size){
+int read_key(int fd, char ** buf_p, int * i, int len){
 	int rc;
 	char * buf = *buf_p;
-
-	if(len + (*i) >= (*a_size)){
-		*a_size = 2 * (*a_size);
-		char * buf2 = robust_malloc(sizeof(char) * (*a_size), 0);
-		if(buf2 == NULL)
-			return -2;
-		memcpy(buf2, buf, (*i));
-		free(buf);
-		buf = buf2;
+	if(!buf){
+		buf = robust_malloc(sizeof(char) * len, 0);
 		*buf_p = buf;
 	}
-	
+
 	rc = read(fd, buf + (*i), len);
+
+	if(rc == -1){
+		perror("Error: ");
+		return -3;
+	}
 	(*i) += rc;
+
 	if(rc < len){
 		return 0;
 	}
@@ -282,198 +279,87 @@ int read_key(int fd, char ** buf_p, int * i, int len, int *a_size){
 //text_consume_bin: (int, char **, int *, int *, int *) -> (int)
 // Consume el buffer del file descriptor en modo binario
 // Devuelve -1 si no hay memoria disponible, 0 si no hay nada que leer y 1 si todo salio correctamente
-int text_consume_bin(int fd, char ** buf_p, int * index, int * size, int * a_size){
+int text_consume_bin(int fd, char ** buf_p, int * index, int * size, int * a_size, Binary * binary){
 	char * buf;
-	if(*buf_p == NULL || size == 0){
-		*a_size = 2049;
-		buf = robust_malloc(sizeof(char) * (*a_size), 0);
-		if(buf == NULL)
-			return -1;
-	}else{
-		buf = *buf_p;
-	}
 	int rc;
 	int i = *size;
-	// printf("index %d\n", *index);
-	if(*index == 0){
-		rc = read_code(fd, &buf, &i);
+	int len;
+	if(*index <= 1){
+		rc = read_code(fd);
+
 		if(rc == 0) return 0;
-		*index = 1;
-		if(buf[0] == STATS){
+		
+		binary->mode = rc;
+		
+		if(binary->mode != GET && binary->mode != PUT && binary->mode != DEL){
 			*index = 0;
-			*size = i;
-			*buf_p = buf;
-			return 3;
-		}
-		if(buf[0] != GET && buf[0] != PUT && buf[0] != DEL){
-			*index = 0;
-			*size = i;
-			*buf_p = buf;
 			int comm = EINVAL;
 			writen(fd, &comm, 1);
 			return -2;
 		}
-		int len = read_v_size(fd, &buf, &i);
-		if(len == -1){
-			*size = i;
-			*buf_p = buf;
+		
+		len = read_v_size(fd);
+		
+		if(len == -1)
 			return 1;
-		}
+		
+		binary->keySize = len;
+		*index = 1;
+	}
+	if(*index <= 2){
+		
+		rc = read_key(fd, &binary->key, &binary->ind, binary->keySize);
 		*index = 2;
-		rc = read_key(fd, &buf, &i, len, a_size);
-		if(rc == 0){
-			*size = i;
-			*buf_p = buf;
-			return 1;
+		switch (rc){
+			case 0:
+				return 1;
+				break;
+			case -2:
+				return -1;
+				break;
+			case -3:
+				return 1;
+				break;
+			default:
+				break;
 		}
 		
-		if(buf[0]== PUT){
-			*index = 3;
-			int vlen = read_v_size(fd, &buf, &i);
-			if(vlen == -1){
-				*size = i;
-				*buf_p = buf;
-				return 0;
-			}
-
-			*index = 4;
-			rc = read_key(fd, &buf, &i, vlen, a_size);
-			if(rc == 0){
-				*size = i;
-				*buf_p = buf;
+		binary->ind = 0;
+	}
+	if(binary->mode== PUT){
+		int vlen;
+		if(*index <= 3){
+			vlen = read_v_size(fd);
+			if(vlen == -1)
 				return 1;
-			}
-			if(rc == -2){
-				*size = i;
-				*buf_p = buf;
-				return -1;
-			}
-
+			
+			binary->valueSize = vlen;
+			*index = 4;
+		}
+		if(*index <= 4){
+			rc = read_key(fd, &binary->value, &binary->ind, vlen);
+			
+			if(rc == 0)
+				return 1;
+			
+			binary->ind = 0;
+			
+			input_handler_bin(fd, binary->mode, binary->key, binary->value, binary->keySize, binary->valueSize);
+			
+			*index = 0;
+			
+			return 3;
 		}
 	}else{
-		int len;
-		if(*index <= 1){
-			rc = read_code(fd, &buf, &i);
-			if(rc == 0) return 0;
-			*index = 1;
-		}
-		if(*index <= 2){
-			rc = read_key(fd, &buf, &i, len, a_size);
-			if(rc == 0){
-				*size = i;
-				*buf_p = buf;
-				return 1;
-			}
-			if(rc == -2){
-				*size = i;
-				*buf_p = buf;
-				return -1;
-			}
-			*index = 2;
-		}
-		if(buf[0]== PUT){
-			int vlen;
-			if(*index <= 3){
-				vlen = read_v_size(fd, &buf, &i);
-				if(vlen == -1){
-					*size = i;
-					*buf_p = buf;
-					return 0;
-				}
-				*index = 4;
-			}
-			if(*index <= 4){
-				rc = read_key(fd, &buf, &i, vlen, a_size);
-				if(rc == 0){
-					*size = i;
-					*buf_p = buf;
-					return 1;
-				}
-			}
-		}
-
-
+		input_handler_bin(fd, binary->mode, binary->key, NULL, binary->keySize, 0);
+		*index = 0;
+		return 3;
 	}
+
 
 	*index = 0;
-	*size = i;
-	*buf_p = buf;
+
 	return 3;
-}
-
-//parse_text_bin: (int, char *, int, int) -> (int)
-// Parser de un buffer en protocolo binario, toma un conjunto de bits, lo separa en argumentos y llama a las funciones
-// para llevar a cabo la orden
-// Devuelve 0 si consumi todo el buffer, -1 si faltan datos, -2 si no tengo memoria disponible
-int parse_text_bin(int fd, char * buf, int buf_size, int index){
-	// printf("b %d %p", buf_size, buf);
-	if(buf){
-	// Si llegue al final del buffer devuelvo 0
-	if(index >= buf_size)
-		return 0;
-	
-	if(buf_size == 1 && buf[0] == STATS){
-		buf[0] = 0;
-		input_handler_bin(fd, STATS, NULL, NULL, 0, 0);
-		return parse_text_bin(fd, buf, buf_size, index + 1);
-	}
-
-	// Si tengo menos de 5 bytes no tengo suficientes datos para ejecutar el resto de los comandos
-	if(buf_size < 5)
-		return -1;
-	
-	
-	
-	int mode = buf[index];
-	char * key = NULL;
-	char * value = NULL;
-
-	int size = ((int)buf[index+1] * pow(256,3)) + ((int)buf[index+2] * pow(256,2)) + ((int)buf[index+3] * pow(256,1)) + ((int)buf[index+4]);
-	int vSize = 0;
-	// Si tengo menos bytes de los que indica el size entonces faltan datos
-	if((buf_size-5-index) < size)
-		return -1;
-	
-	// Si tengo menos bytes de los que indica el size y ademas esta en modo put y no tengo el tamaño del value entonces faltan datos
-	if(mode == PUT && (size + 9) > buf_size)
-		return -1;
-
-	key = robust_malloc(sizeof(char)*(size+1), 0);
-
-	if(key == NULL)
-		return -2;
-	int k = 0;
-
-	for(int i = (index + 5); i < (size+index+5); i++){
-		key[k++] = buf[i];
-	}
-	key[k] = '\0';
-	index = (size + index + 5);
-	// Si el modo es PUT guardo el value
-	if(mode == PUT){
-		vSize = ((int)buf[index] * pow(256,3)) + ((int)buf[index+1] * pow(256,2)) + ((int)buf[index+2] * pow(256,1)) + ((int)buf[index+3]);
-		
-		if((buf_size-4-index) < vSize)
-			return -1;
-		
-		value = robust_malloc(sizeof(char)*(vSize+1), 0);
-		
-		if(value == NULL)
-			return -2;
-		
-		k = 0;
-		
-		for(int i = (index + 4); i < (vSize+index+4); i++)
-			value[k++] = buf[i];
-		
-		index = (vSize + index + 4);
-	}
-	// Llamo al input handle con el comando parseado
-	input_handler_bin(fd, mode, key, value, size, vSize);
-	// Itero de nuevo para consumir el resto del buffer
-	return parse_text_bin(fd, buf, buf_size, index);
-	}else
-		return -2;
 }
 
 //input_handler: (int, char**) -> ()
@@ -652,8 +538,7 @@ int handle_conn_bin(SocketData * event)
 	
 	int res, res_text, comm;
 	while (1) {
-		res_text = text_consume_bin(event->fd, &(event->buf), &(event->index), &(event->size), &(event->a_len));
-		// printf("res_text %d\n", res_text);
+		res_text = text_consume_bin(event->fd, &(event->buf), &(event->index), &(event->size), &(event->a_len), event->binary);
 		switch (res_text)
 		{
 		case 0:
@@ -669,69 +554,17 @@ int handle_conn_bin(SocketData * event)
 			event->size = 0;
 			break;
 		case 3:
-			res = parse_text_bin(event->fd, (event->buf), event->size, 0);
-			// printf("res %d\n", res);
-			
-			if(res == -2){
-				if(event->buf)
-					free(event->buf);
-				
-				event->buf = NULL;
-				event->a_len = 0;
-				event->index = 0;
-				event->size = 0;
-				comm = EMEM;
-				writen(event->fd, &comm, 1);
-				return 2;
-			}
-			if(res == 0 || res == -2){
-				event->index = 0;
-				event->size = 0;
-			}
+			event->binary->ind = 0;
+			event->binary->key = NULL;
+			event->binary->value = NULL;
+			event->binary->mode = 0;
+			event->binary->valueSize = 0;
+			event->binary->keySize = 0;
+			event->index = 0;
 			break;
 		default:
 			break;
 		}
-		// if(res_text == 0){
-		// 	// close(event->fd);
-		// 	return 1;
-		// }
-		// if(res_text == -1){
-		// 	// printf("emptying buffer\n");
-		// 	// empty_buffer(event->fd);
-		// 	int comm = EMEM;
-		// 	writen(event->fd, &comm, 1);
-		// 	return 1;
-		// }
-		// if(res_text == -2){
-		// 	event->index = 0;
-		// 	event->size = 0;
-		// }
-		// if(res_text == 3){
-		// 	res = parse_text_bin(event->fd, (event->buf), event->size, 0);
-		// 	// printf("res %d\n", res);
-		// 	if(res == -2){
-		// 		if(event->buf)
-		// 			free(event->buf);
-				
-		// 		event->buf = NULL;
-		// 		event->a_len = 0;
-		// 		event->index = 0;
-		// 		event->size = 0;
-		// 		int comm = EMEM;
-		// 		writen(event->fd, &comm, 1);
-		// 		return 2;
-		// 	}
-		// 	if(res == 0 || res == -2){
-		// 		// if(event->buf)
-		// 		// 	free(event->buf);
-				
-		// 		// event->buf = NULL;
-		// 		// event->a_len = 0;
-		// 		event->index = 0;
-		// 		event->size = 0;
-		// 	}
-		// }
 		return 2;
 	}
 }
@@ -768,7 +601,6 @@ void * thread_f(void * arg){
 					close(infd);
 					continue;
 				}
-				
 				ctx->fd = infd;
 				ctx->bin = binlsock == (eventData->fd) ? 1 : 0;
 				ctx->buf = NULL;
@@ -776,7 +608,17 @@ void * thread_f(void * arg){
 				ctx->size = 0; 
 				ctx->a_len = 2049; 
 				event.data.ptr = ctx;
-				
+				if(binlsock == (eventData->fd)){
+					ctx->binary = robust_malloc(sizeof(Binary), 0);
+					ctx->binary->mode = 0;
+					ctx->binary->keySize = 0;
+					ctx->binary->key = NULL;
+					ctx->binary->valueSize = 0;
+					ctx->binary->value = NULL;
+					ctx->binary->ind = 0;
+				}else
+					ctx->binary = NULL;
+
 				s = epoll_ctl (epfd, EPOLL_CTL_ADD, infd, &event);
 				
 				if (s == -1)
@@ -801,6 +643,9 @@ void * thread_f(void * arg){
 								(((SocketData*)events[i].data.ptr)->fd));
 						close (((SocketData*)events[i].data.ptr)->fd);
 						if(events[i].data.ptr){
+							if(((SocketData*)events[i].data.ptr)->binary)
+								free(((SocketData*)events[i].data.ptr)->binary);
+							
 							if(((SocketData*)events[i].data.ptr)->buf)
 								free(((SocketData*)events[i].data.ptr)->buf);
 							free(events[i].data.ptr);

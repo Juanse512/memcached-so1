@@ -1,5 +1,5 @@
 -module(cliente).
--export([start/2, get/2, del/2, stats/1, put/3, test/1, test2/1]).
+-export([start/2, get/2, del/2, stats/1, put/3, test/1, test2/1, closeSocket/1, test3/1, test4/1]).
 
 % generate_bin: Genera un binario con una cantidad N de ceros.
 generate_bin(3) -> <<0,0,0>>;
@@ -15,7 +15,8 @@ compare_response(V) ->
         112 -> enotfound;
         115 -> eunk;
         116 -> emem;
-        101 -> ok
+        101 -> ok;
+        X -> X
     end.
 
 % start: Dado el host y el puerto devuelve el socket conectado al servidor
@@ -25,6 +26,7 @@ start(Hostname,Port) ->
     Sock.
  
 
+decode([]) -> vacio;
 decode(Tail) ->
     [_, _, _, _ | Ntail] = Tail,
     Ntail.
@@ -106,3 +108,22 @@ test2(N) ->
 testAux2(_, 0) -> [];
 testAux2(Sock, N) -> R = del(Sock, integer_to_list(N)),
                      [R] ++ testAux2(Sock, N-1).
+
+test3(N) -> 
+    Sock = start("localhost", 889),
+    testAux3(Sock, N).
+testAux3(_, 0) -> [];
+testAux3(Sock, N) -> R1 = put(Sock, integer_to_list(N), integer_to_list(N)),
+                    %  R2 = get(Sock, integer_to_list(N+1)),
+                     R3 = del(Sock, integer_to_list((N+1))),
+                     [R1] ++ [R3] ++ testAux3(Sock, N-1).
+
+test4(N) -> 
+    Sock = start("localhost", 889),
+    testAux4(Sock, N).
+testAux4(_, 0) -> [];
+testAux4(Sock, N) -> R1 = get(Sock, integer_to_list(N)),
+                     [R1] ++ testAux4(Sock, N-1).
+
+
+closeSocket(Sock) -> gen_tcp:shutdown(Sock, read_write).
